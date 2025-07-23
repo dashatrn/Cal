@@ -24,7 +24,7 @@ export default function App() {
   return (
     <div className="min-h-screen bg-gray-100 flex flex-col">
       <header className="text-center py-4 text-3xl font-semibold">Cal</header>
-
+<div className="bg-pink-500 text-white p-4">Tailwind works!</div>
       <main className="flex-1 px-4">
         <FullCalendar
           plugins={[dayGridPlugin]}
