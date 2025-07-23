@@ -17,11 +17,3 @@ A smart web app that turns screenshots and PDFs of meeting invites into real-tim
   - directly to your Google Calendar (if you connect it).
 
 ---
-
-## Coming soon
-
-- Natural language constraint parsing (e.g. “only after 5pm”)
-- Recurring events and templates
-- AI-enhanced parsing with spaCy or small LLMs
-- ICS export for Apple/Outlook syncing
-- Optional Chrome extension
