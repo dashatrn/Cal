@@ -5,9 +5,15 @@
  tools (Session, select) for DB interaction.
 '''
 
-from fastapi import FastAPI, Depends, HTTPException
+from fastapi import FastAPI, Depends
 from sqlalchemy.orm import Session
 from sqlalchemy import select
+
+# ── local modules ─────────────────────────────────────────────
+from .db import Base, engine, get_db
+from .models import Event
+from .schemas import EventIn, EventOut
+# ───────────────────────────────────────
 
 
 app = FastAPI(title="Cal API")
