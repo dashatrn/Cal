@@ -1,35 +1,38 @@
-import { useState } from 'react'
-import reactLogo from './assets/react.svg'
-import viteLogo from '/vite.svg'
-import './App.css'
+import { useEffect, useState } from 'react';
+import FullCalendar from '@fullcalendar/react';
+import dayGridPlugin from '@fullcalendar/daygrid';
+import '@fullcalendar/common/main.css';
+import '@fullcalendar/daygrid/main.css';
+import './index.css'; // keeps Tailwind
 
-function App() {
-  const [count, setCount] = useState(0)
-
-  return (
-    <>
-      <div>
-        <a href="https://vite.dev" target="_blank">
-          <img src={viteLogo} className="logo" alt="Vite logo" />
-        </a>
-        <a href="https://react.dev" target="_blank">
-          <img src={reactLogo} className="logo react" alt="React logo" />
-        </a>
-      </div>
-      <h1>Vite + React</h1>
-      <div className="card">
-        <button onClick={() => setCount((count) => count + 1)}>
-          count is {count}
-        </button>
-        <p>
-          Edit <code>src/App.tsx</code> and save to test HMR
-        </p>
-      </div>
-      <p className="read-the-docs">
-        Click on the Vite and React logos to learn more
-      </p>
-    </>
-  )
+interface EventOut {
+  id: number;
+  title: string;
+  start: string;
+  end: string;
 }
 
-export default App
+export default function App() {
+  const [events, setEvents] = useState<EventOut[]>([]);
+
+  useEffect(() => {
+    fetch('https://silver-goldfish-44r7x5x9qg5255jv-8000.app.github.dev/events')
+      .then((r) => r.json())
+      .then(setEvents);
+  }, []);
+
+  return (
+    <div className="min-h-screen bg-gray-100 flex flex-col">
+      <header className="text-center py-4 text-3xl font-semibold">Cal</header>
+
+      <main className="flex-1 px-4">
+        <FullCalendar
+          plugins={[dayGridPlugin]}
+          initialView="dayGridWeek"
+          events={events}
+          height="auto"
+        />
+      </main>
+    </div>
+  );
+}
