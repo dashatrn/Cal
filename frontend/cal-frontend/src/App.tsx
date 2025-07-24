@@ -2,8 +2,6 @@ import { useEffect, useState, useRef } from "react";
 import FullCalendar from "@fullcalendar/react";
 import dayGridPlugin from "@fullcalendar/daygrid";
 
-import "@fullcalendar/core/index.global.css";
-import "@fullcalendar/daygrid/index.global.css";
 import "./App.css";           // ←⟵ custom tweaks (see step 2)
 
 interface EventOut {

@@ -2,10 +2,10 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <title>Cal</title>
+    <link rel="icon" href="/favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 
-    <!-- FullCalendar styles (pulled straight from the npm
-         packages so we avoid Vite's sub-path export headaches) -->
+    <!-- ✨ FullCalendar styles here (CDN copies, locked to 6.1.8) -->
     <link
       rel="stylesheet"
       href="https://cdn.jsdelivr.net/npm/@fullcalendar/core@6.1.8/index.global.min.css"
@@ -15,9 +15,9 @@
       href="https://cdn.jsdelivr.net/npm/@fullcalendar/daygrid@6.1.8/index.global.min.css"
     />
 
-    <!-- Tailwind compiled styles will be injected by Vite -->
+    <title>Cal</title>
   </head>
-  <body class="min-h-screen bg-gray-100">
+  <body>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
