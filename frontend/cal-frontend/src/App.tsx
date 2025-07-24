@@ -1,11 +1,13 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import FullCalendar from "@fullcalendar/react";
 import dayGridPlugin from "@fullcalendar/daygrid";
-import "@fullcalendar/core/main.css";     // v6.1.8 file name
-import "@fullcalendar/daygrid/main.css";
+
+import "@fullcalendar/core/index.global.css";
+import "@fullcalendar/daygrid/index.global.css";
+import "./App.css";           // ←⟵ custom tweaks (see step 2)
 
 interface EventOut {
-  id: string;      // FullCalendar wants string ids
+  id: string;
   title: string;
   start: string;
   end: string;
@@ -13,43 +15,62 @@ interface EventOut {
 
 export default function App() {
   const [events, setEvents] = useState<EventOut[]>([]);
+  const calRef = useRef<FullCalendar | null>(null);
 
+  // fetch your events once
   useEffect(() => {
-    fetch(
-      "https://silver-goldfish-44r7x5x9qg5255jv-8000.app.github.dev/events"
-    )
-      .then((r) => r.json())
-      .then((raw) =>
-        setEvents(
-          raw.map((e: any) => ({
-            ...e,
-            id: String(e.id), // cast to string
-
-            // if end === start (zero-length) add +1 h so dayGrid can render it
-            end:
-              e.end === e.start
-                ? new Date(
-                    new Date(e.start).getTime() + 60 * 60 * 1000
-                  ).toISOString()
-                : e.end,
-          }))
-        )
-      );
+    fetch("https://silver-goldfish-44r7x5x9qg5255jv-8000.app.github.dev/events")
+      .then(r => r.json())
+      .then(setEvents);
   }, []);
 
+  /** helpers so the side-arrow buttons can drive the calendar */
+  const gotoPrev = () => calRef.current?.getApi().prev();
+  const gotoNext = () => calRef.current?.getApi().next();
+
   return (
-    <div className="min-h-screen bg-gray-100 flex flex-col">
-      <header className="text-center py-4 text-3xl font-semibold">Cal</header>
+    <div className="min-h-screen flex flex-col bg-gray-100">
+      {/* ——— header ——— */}
+      <header className="py-6 text-center bg-white shadow">
+        <h1 className="text-4xl font-extrabold tracking-wide">C&nbsp;a&nbsp;l</h1>
+      </header>
 
-      {/* pink bar proves Tailwind is compiling – remove whenever you like */}
-      <div className="bg-pink-500 text-white p-4">Tailwind works!</div>
+      {/* ——— calendar area ——— */}
+      <main className="relative flex-1 px-4 md:px-10 pb-4">
+        {/* left arrow */}
+        <button
+          onClick={gotoPrev}
+          className="hidden md:flex items-center justify-center
+                     absolute left-0 top-1/2 -translate-y-1/2
+                     w-10 h-10 bg-white rounded-full shadow
+                     hover:bg-gray-100"
+          aria-label="Previous"
+        >
+          ‹
+        </button>
 
-      <main className="flex-1 px-4">
+        {/* right arrow */}
+        <button
+          onClick={gotoNext}
+          className="hidden md:flex items-center justify-center
+                     absolute right-0 top-1/2 -translate-y-1/2
+                     w-10 h-10 bg-white rounded-full shadow
+                     hover:bg-gray-100"
+          aria-label="Next"
+        >
+          ›
+        </button>
+
+        {/* FullCalendar itself */}
         <FullCalendar
+          ref={calRef}
           plugins={[dayGridPlugin]}
           initialView="dayGridWeek"
           events={events}
-          height="auto"
+          /** let it grow to fill the flex column */
+          height="100%"
+          /** disable FC’s own header, we’re using custom arrows */
+          headerToolbar={false}
         />
       </main>
     </div>

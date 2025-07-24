@@ -1,3 +1,8 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* tiny sanity-check banner */
+.banner {
+  @apply bg-pink-500 text-white p-4 text-center font-semibold;
+}
