@@ -1,4 +1,5 @@
 from datetime import datetime
+#^needed for start and end
 from pydantic import BaseModel, Field
 
 
@@ -15,3 +16,22 @@ class EventIn(BaseModel):
 
 class EventOut(EventIn):
     id: int
+
+
+
+    '''
+
+    “Hey FastAPI, when someone calls my API, I want to validate and return JSON that looks like this:”
+    {
+  "id": 1,
+  "title": "Dentist",
+  "start": "2025-08-01T09:00:00",
+  "end": "2025-08-01T10:00:00"
+}
+
+
+    defines API input/output structure
+    translator for outside world, what data allowed in internal db
+    as well as protocls for what is sent out
+    API models built using Pydantic
+    '''
