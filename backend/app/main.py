@@ -7,7 +7,11 @@ Get a database session for each request
 select from database table, makes queries like SELECT * FROM events
 in a clean way
 '''
-from fastapi import FastAPI, Depends
+from datetime import datetime
+from typing import List
+
+from fastapi import FastAPI, Depends, HTTPException, status
+from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from sqlalchemy import select
 
@@ -22,8 +26,22 @@ from .models import Event
 from .schemas import EventIn, EventOut
 # ───────────────────────────────────────
 
+
+
+
 # Creates API
 app = FastAPI(title="Cal API")
+
+
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:5173"],
+    allow_credentials=True,
+    allow_methods=["GET", "POST", "PUT", "DELETE"],
+    allow_headers=["*"],
+)
+
 
 
 # runs when app starts and creats table if it doesn't existyet
@@ -107,9 +125,30 @@ def create_event(data: EventIn, db: Session = Depends(get_db)):
     #event returned with new id
     return evt
 
+@app.put("/events/{event_id}", response_model=EventOut)
+def update_event(event_id: int, payload: EventIn, db: Session = Depends(get_db)):
+    event = db.get(Event, event_id)
+    if event is None:
+        raise HTTPException(status_code=404, detail="Event not found")
 
+    for field, value in payload.model_dump().items():
+        setattr(event, field, value)
 
+    db.commit()
+    db.refresh(event)
+    return event
 
+# ------------------------------------------------------------
+# 7) Delete an event
+# ------------------------------------------------------------
+@app.delete("/events/{event_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_event(event_id: int, db: Session = Depends(get_db)):
+    event = db.get(Event, event_id)
+    if event is None:
+        raise HTTPException(status_code=404, detail="Event not found")
+
+    db.delete(event)
+    db.commit()
 
 '''
 | Concept                    | What It Does                                                                                                        |
