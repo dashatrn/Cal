@@ -2,27 +2,27 @@ import { useEffect, useState, useRef } from "react";
 import FullCalendar from "@fullcalendar/react";
 import dayGridPlugin from "@fullcalendar/daygrid";
 
-import "./App.css";           // ←⟵ custom tweaks (see step 2)
+import "./App.css";
+import { listEvents } from "./api";
+import type { EventOut as ApiEvent } from "./api";
 
-interface EventOut {
-  id: string;
-  title: string;
-  start: string;
-  end: string;
-}
+/** Calendar-friendly shape: id must be a string */
+type CalEvent = Omit<ApiEvent, "id"> & { id: string };
 
 export default function App() {
-  const [events, setEvents] = useState<EventOut[]>([]);
+  const [events, setEvents] = useState<CalEvent[]>([]);
   const calRef = useRef<FullCalendar | null>(null);
 
-  // fetch your events once
+  // initial load
   useEffect(() => {
-    fetch("https://silver-goldfish-44r7x5x9qg5255jv-8000.app.github.dev/events")
-      .then(r => r.json())
-      .then(setEvents);
+    listEvents()
+      .then(apiEvents =>
+        setEvents(apiEvents.map(e => ({ ...e, id: e.id.toString() })))
+      )
+      .catch(console.error);
   }, []);
 
-  /** helpers so the side-arrow buttons can drive the calendar */
+  /** side-arrow helpers */
   const gotoPrev = () => calRef.current?.getApi().prev();
   const gotoNext = () => calRef.current?.getApi().next();
 
@@ -65,9 +65,7 @@ export default function App() {
           plugins={[dayGridPlugin]}
           initialView="dayGridWeek"
           events={events}
-          /** let it grow to fill the flex column */
           height="100%"
-          /** disable FC’s own header, we’re using custom arrows */
           headerToolbar={false}
         />
       </main>

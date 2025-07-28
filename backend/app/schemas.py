@@ -16,7 +16,7 @@ class EventIn(BaseModel):
 
 class EventOut(EventIn):
     id: int
-
+    model_config = {"from_attributes": True}
 
 
     '''

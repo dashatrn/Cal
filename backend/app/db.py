@@ -31,8 +31,7 @@ sqlite:///... → The format SQLAlchemy expects for SQLite file paths
 '''
 
 
-SQLITE_URL = f"sqlite:///{Path(__file__).resolve().parents[1] / 'cal.db'}"
-
+SQLITE_URL = f"sqlite:///{str(Path(__file__).resolve().parents[1] / 'cal.db')}"
 
 
 '''engine manages the connection to the SQLite file.

@@ -16,10 +16,16 @@ from .db import Base
 class Event(Base):
     __tablename__ = "events"
 #unique id number for each row, event name, start time, end time
-    id:    Mapped[int]      = mapped_column(Integer, primary_key=True)
+    '''id:    Mapped[int]      = mapped_column(Integer, primary_key=True)
     title: Mapped[str]      = mapped_column(String(200), nullable=False)
     start: Mapped[datetime] = mapped_column(DateTime, nullable=False)
-    end:   Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    end:   Mapped[datetime] = mapped_column(DateTime, nullable=False)'''
+
+    
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    title: Mapped[str]      = mapped_column(String(200), nullable=False)
+    start: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    end:   Mapped[datetime] = mapped_column(DateTime(timezone=True),   nullable=False)
 
 
 
