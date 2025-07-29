@@ -31,12 +31,14 @@ export default function App() {
   const gotoPrev = () => calRef.current?.getApi().prev();
   const gotoNext = () => calRef.current?.getApi().next();
 
- const openCreate = (dateISO?: string) =>
+
+const openCreate = (dateISO?: string) =>
    setModalInit(
      dateISO
-       ? { id: 0, title: "", start: dateISO, end: dateISO } // clicked day
-       : null                                               // blank form
-   );  const openEdit = (apiEvent: ApiEvent) => setModalInit(apiEvent);
+       ? { id: 0, title: "", start: dateISO, end: dateISO }
+       : undefined                          // ← modal opens blank
+   );
+   const openEdit = (apiEvent: ApiEvent) => setModalInit(apiEvent);
   const handleSaved = (
     evt: ApiEvent,
     mode: "create" | "update" | "delete"
