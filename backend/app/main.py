@@ -26,10 +26,10 @@ from .schemas import EventIn, EventOut
 app = FastAPI(title="Cal API")
 
 
-
+from os import getenv
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=[getenv("FRONTEND_ORIGIN", "http://localhost:5173")],
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE"],
     allow_headers=["*"],

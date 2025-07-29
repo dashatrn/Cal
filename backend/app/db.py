@@ -30,8 +30,10 @@ __file__ → The current file (db.py)
 sqlite:///... → The format SQLAlchemy expects for SQLite file paths
 '''
 
+import os
 
-SQLITE_URL = f"sqlite:///{str(Path(__file__).resolve().parents[1] / 'cal.db')}"
+DB_URL = os.getenv("DATABASE_URL") or f"sqlite:///{str(Path(__file__).resolve().parents[1] / 'cal.db')}"
+engine = create_engine(DB_URL, echo=False, future=True)
 
 
 '''engine manages the connection to the SQLite file.
@@ -39,10 +41,9 @@ echo=False: don’t print every query to the terminal.
 future=True: use newer SQLAlchemy behavior.
 object knows where databse is, how to speak SQL, and how to run transactions'''
 
-engine = create_engine(SQLITE_URL, echo=False, future=True)
 
 
-SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
+SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False, future=True)
 '''This factory makes sessions, single-use temp database connections per request.
 bind = engine ties it to db
 autoflush and autocommit set to False means control when changes get saved, which is safer

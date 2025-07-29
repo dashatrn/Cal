@@ -24,8 +24,7 @@ export default function App() {
       .then((api) => setEvents(api.map((e) => ({ ...e, id: e.id.toString() }))))
       .catch(console.error);
 
-  useEffect(reload, []);
-
+  useEffect(() => { void reload(); }, []);
   /** helpers */
   const gotoPrev = () => calRef.current?.getApi().prev();
   const gotoNext = () => calRef.current?.getApi().next();
