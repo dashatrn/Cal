@@ -38,11 +38,15 @@ export default function EventModal({ initial, onClose, onSaved }: Props) {
 
       onSaved(saved, isEdit ? "update" : "create");
       onClose();
-    } catch (err) {
-      /* eslint-disable no-console */
-      console.error(err);
-      alert("Couldn’t save.  Check the browser console for details.");
-    }
+   } catch (err: any) {
+  if (err?.response?.status === 409) {
+    alert(err.response.data.detail);   // ← shows the exact message we crafted on backend
+  } else {
+    console.error(err);
+    alert("Couldn’t save. Check the browser console for details.");
+  }
+}
+
   };
 
   const handleDelete = async () => {

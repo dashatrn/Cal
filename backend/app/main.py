@@ -6,8 +6,8 @@ from typing import List
 from fastapi import FastAPI, Depends, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
-from sqlalchemy import select
-
+from sqlalchemy import select, and_
+from sqlalchemy.exc import IntegrityError
 '''
 db: builds engine and gives access to db
 models: defines the structure of event table
@@ -74,10 +74,23 @@ data.model()dump turns it into a dictionary. '''
 @app.post("/events", response_model=EventOut, status_code=201)
 def create_event(data: EventIn, db: Session = Depends(get_db)):
     #creeates SQLAlchemy object
-    evt = Event(**data.model_dump())
+    payload = data.model_dump()
 
-    # queues it to be saved
+    # --- conflict check  ------------------------
+    overlap_stmt = select(Event).where(
+    and_(Event.start < payload["end"], Event.end > payload["start"])
+    )
+    conflict = db.scalars(overlap_stmt).first()
+    if conflict:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Conflicts with existing event id={conflict.id} «{conflict.title}»",
+        )
+
+    # no conflict → create
+    evt = Event(**payload)
     db.add(evt)
+  
 
     #saves object to SQLite .db file
     db.commit()
@@ -90,6 +103,9 @@ def create_event(data: EventIn, db: Session = Depends(get_db)):
 
 @app.put("/events/{event_id}", response_model=EventOut)
 def update_event(event_id: int, payload: EventIn, db: Session = Depends(get_db)):
+    overlap_stmt = select(Event).where(
+    and_(Event.id != event_id, Event.start < payload["end"], Event.end > payload["start"])
+ )
     event = db.get(Event, event_id)
     if event is None:
         raise HTTPException(status_code=404, detail="Event not found")
