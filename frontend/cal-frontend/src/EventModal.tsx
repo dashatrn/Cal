@@ -3,7 +3,6 @@ import type { EventOut, EventIn } from "./api";
 import { createEvent, updateEvent, deleteEvent } from "./api";
 
 interface Props {
-  /** undefined → blank create form, object → edit form, null → closed */
   initial?: EventOut | null;
   onClose(): void;
   onSaved(e: EventOut, mode: "create" | "update" | "delete"): void;
@@ -11,35 +10,45 @@ interface Props {
 
 export default function EventModal({ initial, onClose, onSaved }: Props) {
   const isoNow = new Date().toISOString().slice(0, 16); // yyyy-mm-ddThh:mm
+
   const [form, setForm] = useState<EventIn>({
     title: initial?.title ?? "",
     start: initial?.start?.slice(0, 16) ?? isoNow,
     end:   initial?.end?.slice(0, 16)   ?? isoNow,
   });
 
-  const change = (k: keyof EventIn) => (e: React.ChangeEvent<HTMLInputElement>) =>
-    setForm({ ...form, [k]: e.target.value });
+  const isEdit = !!(initial && initial.id !== 0);
+
+  const change =
+    (k: keyof EventIn) =>
+    (e: React.ChangeEvent<HTMLInputElement>) =>
+      setForm({ ...form, [k]: e.target.value });
 
   const handleSave = async () => {
-    // add seconds so FastAPI accepts the datetime strings
-    const payload = {
+    const payload: EventIn = {
       ...form,
       start: form.start.endsWith(":00") ? form.start : form.start + ":00",
       end:   form.end.endsWith(":00")   ? form.end   : form.end   + ":00",
     };
 
-    const saved = initial
-      ? await updateEvent((initial as EventOut).id, payload)
-      : await createEvent(payload);
+    try {
+      const saved = isEdit
+        ? await updateEvent((initial as EventOut).id, payload)
+        : await createEvent(payload);
 
-    onSaved(saved, initial ? "update" : "create");
-    onClose();
+      onSaved(saved, isEdit ? "update" : "create");
+      onClose();
+    } catch (err) {
+      /* eslint-disable no-console */
+      console.error(err);
+      alert("Couldn’t save.  Check the browser console for details.");
+    }
   };
 
   const handleDelete = async () => {
-    if (!initial) return;
-    await deleteEvent(initial.id);
-    onSaved(initial, "delete");
+    if (!isEdit) return;
+    await deleteEvent(initial!.id);
+    onSaved(initial!, "delete");
     onClose();
   };
 
@@ -47,7 +56,7 @@ export default function EventModal({ initial, onClose, onSaved }: Props) {
     <div className="fixed inset-0 grid place-items-center bg-black/40 z-20">
       <div className="bg-white rounded shadow p-6 w-80 space-y-4">
         <h2 className="text-xl font-semibold">
-          {initial && initial !== undefined ? "Edit Event" : "New Event"}
+          {isEdit ? "Edit Event" : "New Event"}
         </h2>
 
         <label className="block">
@@ -80,7 +89,7 @@ export default function EventModal({ initial, onClose, onSaved }: Props) {
         </label>
 
         <div className="flex justify-between pt-3">
-          {initial && initial !== undefined && (
+          {isEdit && (
             <button
               type="button"
               onClick={handleDelete}

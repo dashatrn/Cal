@@ -1,6 +1,7 @@
 import { useEffect, useState, useRef } from "react";
 import FullCalendar from "@fullcalendar/react";
 import dayGridPlugin from "@fullcalendar/daygrid";
+import timeGridPlugin from "@fullcalendar/timegrid";   // NEW
 import interactionPlugin from "@fullcalendar/interaction";
 import type { DateClickArg } from "@fullcalendar/interaction";
 import type { EventClickArg, EventInput } from "@fullcalendar/core";
@@ -30,14 +31,24 @@ export default function App() {
   const gotoPrev = () => calRef.current?.getApi().prev();
   const gotoNext = () => calRef.current?.getApi().next();
 
+  /** -----------------------------------------------------------------
+   *  When the user clicks a day-cell, FullCalendar hands us `YYYY-MM-DD`
+   *  ➜ convert that into a full ISO string that `<input type="datetime-local">`
+   *    accepts: `YYYY-MM-DDTHH:MM`
+   * ---------------------------------------------------------------- */
   const openCreate = (dateISO?: string) =>
     setModalInit(
       dateISO
-        ? { id: 0, title: "", start: dateISO + ":00", end: dateISO + ":00" }
+        ? {
+            id: 0,
+            title: "",
+            start: dateISO + "T00:00",
+            end:   dateISO + "T01:00",
+          }
         : undefined
     );
 
-  const openEdit = (evt: ApiEvent) => setModalInit(evt);
+  const openEdit  = (evt: ApiEvent) => setModalInit(evt);
 
   const handleSaved = (
     evt: ApiEvent,
@@ -89,7 +100,7 @@ export default function App() {
 
         <FullCalendar
           ref={calRef}
-          plugins={[dayGridPlugin, interactionPlugin]}
+          plugins={[dayGridPlugin, timeGridPlugin, interactionPlugin]}           
           initialView="dayGridWeek"
           events={events as EventInput[]}
           height="100%"
@@ -111,4 +122,4 @@ export default function App() {
       )}
     </div>
   );
-}
+} 
