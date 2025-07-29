@@ -1,12 +1,5 @@
 # app/main.py
 
-''' 
-import Fast API to create web routes (GET/POST)
-Depends: handles dependency injection, auto plugging in database when necessary
-Get a database session for each request
-select from database table, makes queries like SELECT * FROM events
-in a clean way
-'''
 from datetime import datetime
 from typing import List
 
@@ -65,39 +58,6 @@ def read_root():
 #https://silver-goldfish-44r7x5x9qg5255jv-8000.app.github.dev/health
 
 
-
-'''
-backend route, sits on server waiting for GET request to /events. request comes from React frontend. 
-When react code runs, send get request here.
-Receving get request, sends from database. 
-response_model = list[EventOUT] means return value shuold be list EventOut objects, defined by schemas.oy
-db: Session = Depends(get_db) means FASTAPI will run get_db() and give result to this func as db
-select(Event) = Give all rows from events table, like writing SELECT * FROM events in SQL
-db.scalars(...).all() - Execute that query, return that into a Python list of event objects
-FastAPI autoconverst into JSON
-sends back to frontend
-events are stored in SQLite database file on server
-
-
-[
-  {
-    "id": 1,
-    "title": "Dentist",
-    "start": "2025-08-01T09:00:00",
-    "end": "2025-08-01T10:00:00"
-  },
-  ...
-]
-
-
-The website requests the events, 
-events live in database
-backend is middle layer speaks to db and internet
-
-React code runs and sends
-fetch("https://your-url-8000.app.github.dev/events")
-
-'''
 
 @app.get("/events", response_model=list[EventOut])
 def list_events(db: Session = Depends(get_db)):
@@ -164,4 +124,49 @@ def delete_event(event_id: int, db: Session = Depends(get_db)):
 | `Depends(get_db)`          | Tells FastAPI: “Give this route a fresh database connection, and close it afterward.”                               |
 | `response_model=...`       | Makes sure your API returns clean, well-shaped JSON that matches your schema (`EventOut`).                          |
 
+'''
+
+
+
+
+'''
+backend route, sits on server waiting for GET request to /events. request comes from React frontend. 
+When react code runs, send get request here.
+Receving get request, sends from database. 
+response_model = list[EventOUT] means return value shuold be list EventOut objects, defined by schemas.oy
+db: Session = Depends(get_db) means FASTAPI will run get_db() and give result to this func as db
+select(Event) = Give all rows from events table, like writing SELECT * FROM events in SQL
+db.scalars(...).all() - Execute that query, return that into a Python list of event objects
+FastAPI autoconverst into JSON
+sends back to frontend
+events are stored in SQLite database file on server
+
+
+[
+  {
+    "id": 1,
+    "title": "Dentist",
+    "start": "2025-08-01T09:00:00",
+    "end": "2025-08-01T10:00:00"
+  },
+  ...
+]
+
+
+The website requests the events, 
+events live in database
+backend is middle layer speaks to db and internet
+
+React code runs and sends
+fetch("https://your-url-8000.app.github.dev/events")
+
+'''
+
+
+''' 
+import Fast API to create web routes (GET/POST)
+Depends: handles dependency injection, auto plugging in database when necessary
+Get a database session for each request
+select from database table, makes queries like SELECT * FROM events
+in a clean way
 '''
