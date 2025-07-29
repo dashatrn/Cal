@@ -3,32 +3,36 @@ import type { EventOut, EventIn } from "./api";
 import { createEvent, updateEvent, deleteEvent } from "./api";
 
 interface Props {
-  initial?: EventOut | null;          // accepts undefined, null, or EventOut
+  /** undefined → blank create form, object → edit form, null → closed */
+  initial?: EventOut | null;
   onClose(): void;
   onSaved(e: EventOut, mode: "create" | "update" | "delete"): void;
 }
 
-/* rest of file unchanged */
 export default function EventModal({ initial, onClose, onSaved }: Props) {
-  // local form state
+  const isoNow = new Date().toISOString().slice(0, 16); // yyyy-mm-ddThh:mm
+  const [form, setForm] = useState<EventIn>({
+    title: initial?.title ?? "",
+    start: initial?.start?.slice(0, 16) ?? isoNow,
+    end:   initial?.end?.slice(0, 16)   ?? isoNow,
+  });
 
- const isoNow = new Date().toISOString().slice(0, 16); // YYYY-MM-DDTHH:MM
- const [form, setForm] = useState<EventIn>({
-   title: initial?.title ?? "",
-   start: initial?.start ?? isoNow,
-   end:   initial?.end   ?? isoNow,
- });
-  const onChange = (k: keyof EventIn) => (e: React.ChangeEvent<HTMLInputElement>) =>
+  const change = (k: keyof EventIn) => (e: React.ChangeEvent<HTMLInputElement>) =>
     setForm({ ...form, [k]: e.target.value });
 
   const handleSave = async () => {
-    if (initial) {
-      const saved = await updateEvent(initial.id, form);
-      onSaved(saved, "update");
-    } else {
-      const saved = await createEvent(form);
-      onSaved(saved, "create");
-    }
+    // add seconds so FastAPI accepts the datetime strings
+    const payload = {
+      ...form,
+      start: form.start.endsWith(":00") ? form.start : form.start + ":00",
+      end:   form.end.endsWith(":00")   ? form.end   : form.end   + ":00",
+    };
+
+    const saved = initial
+      ? await updateEvent((initial as EventOut).id, payload)
+      : await createEvent(payload);
+
+    onSaved(saved, initial ? "update" : "create");
     onClose();
   };
 
@@ -43,7 +47,7 @@ export default function EventModal({ initial, onClose, onSaved }: Props) {
     <div className="fixed inset-0 grid place-items-center bg-black/40 z-20">
       <div className="bg-white rounded shadow p-6 w-80 space-y-4">
         <h2 className="text-xl font-semibold">
-          {initial ? "Edit Event" : "New Event"}
+          {initial && initial !== undefined ? "Edit Event" : "New Event"}
         </h2>
 
         <label className="block">
@@ -51,33 +55,34 @@ export default function EventModal({ initial, onClose, onSaved }: Props) {
           <input
             className="mt-1 w-full border rounded px-2 py-1"
             value={form.title}
-            onChange={onChange("title")}
+            onChange={change("title")}
           />
         </label>
 
         <label className="block">
-          <span className="text-sm">Start (ISO)</span>
+          <span className="text-sm">Start</span>
           <input
-            className="mt-1 w-full border rounded px-2 py-1"
             type="datetime-local"
+            className="mt-1 w-full border rounded px-2 py-1"
             value={form.start}
-            onChange={onChange("start")}
+            onChange={change("start")}
           />
         </label>
 
         <label className="block">
-          <span className="text-sm">End (ISO)</span>
+          <span className="text-sm">End</span>
           <input
-            className="mt-1 w-full border rounded px-2 py-1"
             type="datetime-local"
+            className="mt-1 w-full border rounded px-2 py-1"
             value={form.end}
-            onChange={onChange("end")}
+            onChange={change("end")}
           />
         </label>
 
         <div className="flex justify-between pt-3">
-          {initial && (
+          {initial && initial !== undefined && (
             <button
+              type="button"
               onClick={handleDelete}
               className="text-red-600 hover:underline"
             >
@@ -85,8 +90,11 @@ export default function EventModal({ initial, onClose, onSaved }: Props) {
             </button>
           )}
           <div className="ml-auto space-x-2">
-            <button onClick={onClose} className="px-3 py-1">Cancel</button>
+            <button type="button" onClick={onClose} className="px-3 py-1">
+              Cancel
+            </button>
             <button
+              type="button"
               onClick={handleSave}
               className="bg-black text-white px-3 py-1 rounded"
             >

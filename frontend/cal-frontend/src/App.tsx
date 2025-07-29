@@ -2,7 +2,7 @@ import { useEffect, useState, useRef } from "react";
 import FullCalendar from "@fullcalendar/react";
 import dayGridPlugin from "@fullcalendar/daygrid";
 import interactionPlugin from "@fullcalendar/interaction";
-import type { DateClickArg } from "@fullcalendar/interaction";   // ← type-only
+import type { DateClickArg } from "@fullcalendar/interaction";
 import type { EventClickArg, EventInput } from "@fullcalendar/core";
 
 import "./App.css";
@@ -10,15 +10,14 @@ import { listEvents } from "./api";
 import type { EventOut as ApiEvent } from "./api";
 import EventModal from "./EventModal";
 
-/** Calendar-friendly shape: id must be a string */
 type CalEvent = Omit<ApiEvent, "id"> & { id: string };
 
 export default function App() {
   const [events, setEvents] = useState<CalEvent[]>([]);
-  const [modalInit, setModalInit] = useState<ApiEvent | null | undefined>(null);
+  const [modalInit, setModalInit] = useState<ApiEvent | undefined | null>(null);
   const calRef = useRef<FullCalendar | null>(null);
 
-  // ─────────────────────────────── initial load
+  /* initial load */
   useEffect(() => {
     listEvents()
       .then((api) =>
@@ -27,18 +26,19 @@ export default function App() {
       .catch(console.error);
   }, []);
 
-  // ─────────────────────────────── helpers
+  /* helpers */
   const gotoPrev = () => calRef.current?.getApi().prev();
   const gotoNext = () => calRef.current?.getApi().next();
 
+  const openCreate = (dateISO?: string) =>
+    setModalInit(
+      dateISO
+        ? { id: 0, title: "", start: dateISO + ":00", end: dateISO + ":00" }
+        : undefined
+    );
 
-const openCreate = (dateISO?: string) =>
-   setModalInit(
-     dateISO
-       ? { id: 0, title: "", start: dateISO, end: dateISO }
-       : undefined                          // ← modal opens blank
-   );
-   const openEdit = (apiEvent: ApiEvent) => setModalInit(apiEvent);
+  const openEdit = (evt: ApiEvent) => setModalInit(evt);
+
   const handleSaved = (
     evt: ApiEvent,
     mode: "create" | "update" | "delete"
@@ -56,46 +56,37 @@ const openCreate = (dateISO?: string) =>
     });
   };
 
-  // ─────────────────────────────── render
   return (
     <div className="min-h-screen flex flex-col bg-gray-100">
-      {/* ——— header ——— */}
-      <header className="py-6 text-center bg-white shadow flex justify-between px-6">
-        <h1 className="text-4xl font-extrabold tracking-wide select-none">
-          C&nbsp;a&nbsp;l
-        </h1>
+      {/* header */}
+      <header className="py-6 bg-white shadow flex justify-between px-6">
+        <h1 className="text-3xl font-bold select-none">Cal</h1>
         <button
-      onClick={() => openCreate()} // ← FIXED          className="bg-black text-white px-3 py-1 rounded"
+          type="button"
+          onClick={() => openCreate()}
+          className="bg-black text-white px-3 py-1 rounded"
         >
           + New
         </button>
       </header>
 
-      {/* ——— calendar area ——— */}
+      {/* calendar */}
       <main className="relative flex-1 px-4 md:px-10 pb-4">
-        {/* arrows */}
         <button
           onClick={gotoPrev}
-          className="hidden md:flex items-center justify-center
-                     absolute left-0 top-1/2 -translate-y-1/2
-                     w-10 h-10 bg-white rounded-full shadow
-                     hover:bg-gray-100"
-          aria-label="Previous"
+          className="hidden md:flex absolute left-0 top-1/2 -translate-y-1/2
+                     w-10 h-10 bg-white rounded-full shadow place-content-center"
         >
           ‹
         </button>
         <button
           onClick={gotoNext}
-          className="hidden md:flex items-center justify-center
-                     absolute right-0 top-1/2 -translate-y-1/2
-                     w-10 h-10 bg-white rounded-full shadow
-                     hover:bg-gray-100"
-          aria-label="Next"
+          className="hidden md:flex absolute right-0 top-1/2 -translate-y-1/2
+                     w-10 h-10 bg-white rounded-full shadow place-content-center"
         >
           ›
         </button>
 
-        {/* FullCalendar */}
         <FullCalendar
           ref={calRef}
           plugins={[dayGridPlugin, interactionPlugin]}
@@ -103,23 +94,21 @@ const openCreate = (dateISO?: string) =>
           events={events as EventInput[]}
           height="100%"
           headerToolbar={false}
-          dateClick={(arg: DateClickArg) => openCreate(arg.dateStr)}          
+          dateClick={(arg: DateClickArg) => openCreate(arg.dateStr)}
           eventClick={(arg: EventClickArg) => {
-            const evt = events.find((e) => e.id === arg.event.id);
-            if (evt) openEdit({ ...evt, id: +evt.id });
+            const e = events.find((x) => x.id === arg.event.id);
+            if (e) openEdit({ ...e, id: +e.id });
           }}
         />
       </main>
 
-        {/* modal */}
-      {modalInit !== null && (                                   /* ③ condition */
+      {modalInit !== null && (
         <EventModal
-          initial={modalInit}                                    // undefined or event
+          initial={modalInit ?? undefined}
           onClose={() => setModalInit(null)}
           onSaved={handleSaved}
         />
       )}
     </div>
   );
-
 }
