@@ -36,7 +36,7 @@ app = FastAPI(title="Cal API")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"],
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE"],
     allow_headers=["*"],
@@ -57,6 +57,9 @@ def init_db() -> None:
 @app.get("/health")
 def health_check():
     return {"status": "ok"}
+@app.get("/")
+def read_root():
+    return {"message": "FastAPI backend is running."}
 
 
 #https://silver-goldfish-44r7x5x9qg5255jv-8000.app.github.dev/health
