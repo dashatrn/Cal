@@ -31,8 +31,12 @@ export default function App() {
   const gotoPrev = () => calRef.current?.getApi().prev();
   const gotoNext = () => calRef.current?.getApi().next();
 
-  const openCreate = () => setModalInit(undefined);          // ② NEW  const openEdit = (apiEvent: ApiEvent) => setModalInit(apiEvent);
-  const openEdit = (apiEvent: ApiEvent) => setModalInit(apiEvent);
+ const openCreate = (dateISO?: string) =>
+   setModalInit(
+     dateISO
+       ? { id: 0, title: "", start: dateISO, end: dateISO } // clicked day
+       : null                                               // blank form
+   );  const openEdit = (apiEvent: ApiEvent) => setModalInit(apiEvent);
   const handleSaved = (
     evt: ApiEvent,
     mode: "create" | "update" | "delete"
@@ -59,8 +63,7 @@ export default function App() {
           C&nbsp;a&nbsp;l
         </h1>
         <button
-          onClick={openCreate}
-          className="bg-black text-white px-3 py-1 rounded"
+      onClick={() => openCreate()} // ← FIXED          className="bg-black text-white px-3 py-1 rounded"
         >
           + New
         </button>
@@ -98,7 +101,7 @@ export default function App() {
           events={events as EventInput[]}
           height="100%"
           headerToolbar={false}
-          dateClick={(_: DateClickArg) => openCreate()}
+          dateClick={(arg: DateClickArg) => openCreate(arg.dateStr)}          
           eventClick={(arg: EventClickArg) => {
             const evt = events.find((e) => e.id === arg.event.id);
             if (evt) openEdit({ ...evt, id: +evt.id });

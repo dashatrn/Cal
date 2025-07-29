@@ -11,12 +11,13 @@ interface Props {
 /* rest of file unchanged */
 export default function EventModal({ initial, onClose, onSaved }: Props) {
   // local form state
-  const [form, setForm] = useState<EventIn>({
-    title: initial?.title ?? "",
-    start: initial?.start ?? "",
-    end:   initial?.end   ?? "",
-  });
 
+ const isoNow = new Date().toISOString().slice(0, 16); // YYYY-MM-DDTHH:MM
+ const [form, setForm] = useState<EventIn>({
+   title: initial?.title ?? "",
+   start: initial?.start ?? isoNow,
+   end:   initial?.end   ?? isoNow,
+ });
   const onChange = (k: keyof EventIn) => (e: React.ChangeEvent<HTMLInputElement>) =>
     setForm({ ...form, [k]: e.target.value });
 
