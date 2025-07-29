@@ -1,15 +1,15 @@
 import { useEffect, useState, useRef } from "react";
 import FullCalendar from "@fullcalendar/react";
 import dayGridPlugin from "@fullcalendar/daygrid";
-import timeGridPlugin from "@fullcalendar/timegrid";   // NEW
+import timeGridPlugin from "@fullcalendar/timegrid";
 import interactionPlugin from "@fullcalendar/interaction";
 import type { DateClickArg } from "@fullcalendar/interaction";
 import type { EventClickArg, EventInput } from "@fullcalendar/core";
 
-import "./App.css";
 import { listEvents } from "./api";
 import type { EventOut as ApiEvent } from "./api";
 import EventModal from "./EventModal";
+import "./App.css";
 
 type CalEvent = Omit<ApiEvent, "id"> & { id: string };
 
@@ -18,53 +18,30 @@ export default function App() {
   const [modalInit, setModalInit] = useState<ApiEvent | undefined | null>(null);
   const calRef = useRef<FullCalendar | null>(null);
 
-  /* initial load */
-  useEffect(() => {
+  /** pull everything once */
+  const reload = () =>
     listEvents()
-      .then((api) =>
-        setEvents(api.map((e) => ({ ...e, id: e.id.toString() })))
-      )
+      .then((api) => setEvents(api.map((e) => ({ ...e, id: e.id.toString() }))))
       .catch(console.error);
-  }, []);
 
-  /* helpers */
+  useEffect(reload, []);
+
+  /** helpers */
   const gotoPrev = () => calRef.current?.getApi().prev();
   const gotoNext = () => calRef.current?.getApi().next();
 
-  /** -----------------------------------------------------------------
-   *  When the user clicks a day-cell, FullCalendar hands us `YYYY-MM-DD`
-   *  ➜ convert that into a full ISO string that `<input type="datetime-local">`
-   *    accepts: `YYYY-MM-DDTHH:MM`
-   * ---------------------------------------------------------------- */
   const openCreate = (dateISO?: string) =>
     setModalInit(
       dateISO
-        ? {
-            id: 0,
-            title: "",
-            start: dateISO + "T00:00",
-            end:   dateISO + "T01:00",
-          }
+        ? { id: 0, title: "", start: dateISO + "T00:00", end: dateISO + "T01:00" }
         : undefined
     );
+  const openEdit = (evt: ApiEvent) => setModalInit(evt);
 
-  const openEdit  = (evt: ApiEvent) => setModalInit(evt);
-
-  const handleSaved = (
-    evt: ApiEvent,
-    mode: "create" | "update" | "delete"
-  ) => {
-    setEvents((curr) => {
-      if (mode === "create")
-        return [...curr, { ...evt, id: evt.id.toString() }];
-      if (mode === "update")
-        return curr.map((e) =>
-          e.id === evt.id.toString() ? { ...evt, id: evt.id.toString() } : e
-        );
-      if (mode === "delete")
-        return curr.filter((e) => e.id !== evt.id.toString());
-      return curr;
-    });
+  /** after a modal saves, make sure state = DB truth */
+  const handleSaved = () => {
+    reload();                 // <—— guarantees UI matches DB
+    setModalInit(null);
   };
 
   return (
@@ -83,25 +60,14 @@ export default function App() {
 
       {/* calendar */}
       <main className="relative flex-1 px-4 md:px-10 pb-4">
-        <button
-          onClick={gotoPrev}
-          className="hidden md:flex absolute left-0 top-1/2 -translate-y-1/2
-                     w-10 h-10 bg-white rounded-full shadow place-content-center"
-        >
-          ‹
-        </button>
-        <button
-          onClick={gotoNext}
-          className="hidden md:flex absolute right-0 top-1/2 -translate-y-1/2
-                     w-10 h-10 bg-white rounded-full shadow place-content-center"
-        >
-          ›
-        </button>
+        <button onClick={gotoPrev} className="hidden md:flex absolute left-0 top-1/2 -translate-y-1/2 w-10 h-10 bg-white rounded-full shadow place-content-center">‹</button>
+        <button onClick={gotoNext} className="hidden md:flex absolute right-0 top-1/2 -translate-y-1/2 w-10 h-10 bg-white rounded-full shadow place-content-center">›</button>
 
         <FullCalendar
           ref={calRef}
-          plugins={[dayGridPlugin, timeGridPlugin, interactionPlugin]}           
-          initialView="dayGridWeek"
+          plugins={[dayGridPlugin, timeGridPlugin, interactionPlugin]}
+          /** <-- new default */
+          initialView="timeGridWeek"
           events={events as EventInput[]}
           height="100%"
           headerToolbar={false}
@@ -122,4 +88,4 @@ export default function App() {
       )}
     </div>
   );
-} 
+}
