@@ -17,8 +17,7 @@ export default function EventModal({ initial, onClose, onSaved }: Props) {
     end:   initial?.end?.slice(0, 16)   ?? isoNow,
   });
 
-  const isEdit = !!(initial && initial.id !== 0);
-
+  const isEdit = typeof initial?.id === "number" && initial.id !== 0;
   const change =
     (k: keyof EventIn) =>
     (e: React.ChangeEvent<HTMLInputElement>) =>

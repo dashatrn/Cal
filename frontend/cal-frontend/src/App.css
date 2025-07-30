@@ -40,3 +40,9 @@
 .read-the-docs {
   color: #888;
 }
+.fc {
+  height: 100% !important;
+}
+.fc-scroller {
+  overflow-y: auto !important;
+}

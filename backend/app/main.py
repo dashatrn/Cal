@@ -19,11 +19,79 @@ from .models import Event
 from .schemas import EventIn, EventOut
 # ───────────────────────────────────────
 
+#new code
+# ── imports – add at the top ──────────────────────────────────────────
+from fastapi import UploadFile, File
+import tempfile, subprocess, re, json
+from pathlib import Path
+from dateutil import parser as dtparse        # pip install python-dateutil
+import pytesseract                            # pip install pytesseract pillow
+from PIL import Image                         # (Pillow)
+# ──────────────────────────────────────────────────────────────────────
+app = FastAPI(title="Cal API")
 
+
+# ── helper to run pytesseract on bytes ────────────────────────────────
+def ocr_to_text(data: bytes) -> str:
+    with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp:
+        tmp.write(data)
+    try:
+        text = pytesseract.image_to_string(Image.open(tmp.name))
+        return text
+    finally:
+        Path(tmp.name).unlink(missing_ok=True)
+
+
+# ── naive parser: find first YYYY-MM-DD and first time range ──────────
+_date_re = re.compile(r"\b(\d{4}[-/]\d{1,2}[-/]\d{1,2})\b")
+
+# dash can be -, –, — or even two hyphens; allow AM/PM too
+_time_re = re.compile(
+    r"(\d{1,2}[:]\d{2}\s*(?:AM|PM)?)\s*[-–—]{1,2}\s*(\d{1,2}[:]\d{2}\s*(?:AM|PM)?)",
+    re.IGNORECASE,
+)
+
+def extract_event_fields(text: str) -> dict[str, str] | None:
+    date_m  = _date_re.search(text)
+    time_m  = _time_re.search(text)
+    if not (date_m and time_m):
+        return None
+    date_iso = dtparse.parse(date_m.group(1)).date().isoformat()
+    start_iso = dtparse.parse(f"{date_iso} {time_m.group(1)}").isoformat()
+    end_iso   = dtparse.parse(f"{date_iso} {time_m.group(2)}").isoformat()
+
+    # Title → first non-empty line that isn’t the date/time line
+    lines = [ln.strip() for ln in text.splitlines() if ln.strip()]
+    try:
+        # Prefer the line after the date/time block
+        date_idx = next(i for i, l in enumerate(lines) if _date_re.search(l))
+        title = lines[date_idx + 2]  # date line, time line, then title
+    except Exception:
+        title = lines[0] if lines else "Untitled"
+    title = title[:200]
+
+    return {"title": title, "start": start_iso, "end": end_iso}
+
+
+# ── new route ---------------------------------------------------------
+@app.post("/uploads", status_code=201)
+async def upload_file(file: UploadFile = File(...)):
+    raw = await file.read()
+    text = ocr_to_text(raw)
+
+    print("──── OCR TEXT ────")
+    print(text)
+    print("──────────────────")
+
+    extracted = extract_event_fields(text)
+    if not extracted:
+        raise HTTPException(status_code=422, detail="Could not parse date/time")
+    return extracted
+
+#end new code
 
 
 # Creates API
-app = FastAPI(title="Cal API")
 
 
 from os import getenv

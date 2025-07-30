@@ -10,6 +10,7 @@ import { listEvents } from "./api";
 import type { EventOut as ApiEvent } from "./api";
 import EventModal from "./EventModal";
 import "./App.css";
+import UploadDrop from "./UploadDrop"; 
 
 type CalEvent = Omit<ApiEvent, "id"> & { id: string };
 
@@ -38,27 +39,32 @@ export default function App() {
   const openEdit = (evt: ApiEvent) => setModalInit(evt);
 
   /** after a modal saves, make sure state = DB truth */
-  const handleSaved = () => {
-    reload();                 // <—— guarantees UI matches DB
-    setModalInit(null);
-  };
+  const handleSaved = (e?: ApiEvent) => {
+  if (e) calRef.current?.getApi().gotoDate(e.start);
+  reload();
+  setModalInit(null);
+};
 
   return (
     <div className="min-h-screen flex flex-col bg-gray-100">
       {/* header */}
+      
       <header className="py-6 bg-white shadow flex justify-between px-6">
         <h1 className="text-3xl font-bold select-none">Cal</h1>
-        <button
-          type="button"
-          onClick={() => openCreate()}
-          className="bg-black text-white px-3 py-1 rounded"
-        >
-          + New
-        </button>
+        <div className="flex gap-4">
+          <UploadDrop onPrefill={(e) => setModalInit(e)} />
+          <button
+            type="button"
+            onClick={() => openCreate()}
+            className="bg-black text-white px-3 py-1 rounded"
+          >
+            + New
+          </button>
+        </div>
       </header>
 
       {/* calendar */}
-      <main className="relative flex-1 px-4 md:px-10 pb-4">
+        <main className="relative flex-1 px-4 md:px-10 pb-4 h-[calc(100vh-96px)]">
         <button onClick={gotoPrev} className="hidden md:flex absolute left-0 top-1/2 -translate-y-1/2 w-10 h-10 bg-white rounded-full shadow place-content-center">‹</button>
         <button onClick={gotoNext} className="hidden md:flex absolute right-0 top-1/2 -translate-y-1/2 w-10 h-10 bg-white rounded-full shadow place-content-center">›</button>
 
@@ -67,6 +73,7 @@ export default function App() {
           plugins={[dayGridPlugin, timeGridPlugin, interactionPlugin]}
           /** <-- new default */
           initialView="timeGridWeek"
+          eventDisplay="block"
           events={events as EventInput[]}
           height="100%"
           headerToolbar={false}
