@@ -1,0 +1,74 @@
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+
+jobs:
+  test-build:
+    runs-on: ubuntu-latest
+
+    services:
+      pg:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_DB: neondb
+          POSTGRES_USER: pguser
+          POSTGRES_PASSWORD: pgpass
+        ports: [ "5432:5432" ]
+        options: >-
+          --health-cmd "pg_isready -U pguser -d neondb"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      # same string your docker-compose uses
+      DATABASE_URL: postgresql://pguser:pgpass@localhost:5432/neondb
+      FRONTEND_ORIGIN: http://localhost:5173
+      PYTHONUNBUFFERED: "1"
+
+    steps:
+    - uses: actions/checkout@v4
+
+    # 1. Backend ------------------------------------------------------------------
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.12"
+
+    - name: Install backend deps
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r backend/requirements.txt
+        pip install pytest mypy
+
+    - name: Run Alembic migrations
+      working-directory: backend
+      run: |
+        alembic upgrade head
+
+    - name: Run pytest
+      working-directory: backend
+      run: pytest -q
+
+    # 2. Frontend -----------------------------------------------------------------
+    - name: Set up Node
+      uses: actions/setup-node@v4
+      with:
+        node-version: "20"
+        cache: npm
+        cache-dependency-path: frontend/cal-frontend/package-lock.json
+
+    - name: Install & build React
+      working-directory: frontend/cal-frontend
+      run: |
+        npm ci
+        npm run build                         # ensures app compiles
+
+    # 3. Static type-check (optional but nice)
+    - name: mypy
+      working-directory: backend
+      run: |
+        mypy app || true      # don’t fail build yet; loosen later
