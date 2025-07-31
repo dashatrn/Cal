@@ -7,8 +7,8 @@ import os
 import sys
 
 # Make sure Alembic can find db.py
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-from db import Base  # your model base class
+sys.path.append(os.path.abspath(os.path.join(os.getcwd(), "app")))
+from app.models import Base          #  <-- imports your Event model
 
 # Alembic config object
 config = context.config

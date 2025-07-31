@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import type { AxiosError } from "axios";
 import type { EventOut, EventIn } from "./api";
 import { createEvent, updateEvent, deleteEvent } from "./api";
 
@@ -14,8 +15,14 @@ export default function EventModal({ initial, onClose, onSaved }: Props) {
   const [form, setForm] = useState<EventIn>({
     title: initial?.title ?? "",
     start: initial?.start?.slice(0, 16) ?? isoNow,
-    end:   initial?.end?.slice(0, 16)   ?? isoNow,
+    end: initial?.end?.slice(0, 16) ?? isoNow,
   });
+
+  const [conflict, setConflict] = useState<null | {
+    title: string;
+    start: string;
+    end: string;
+  }>(null);
 
   const isEdit = typeof initial?.id === "number" && initial.id !== 0;
   const change =
@@ -27,7 +34,7 @@ export default function EventModal({ initial, onClose, onSaved }: Props) {
     const payload: EventIn = {
       ...form,
       start: form.start.endsWith(":00") ? form.start : form.start + ":00",
-      end:   form.end.endsWith(":00")   ? form.end   : form.end   + ":00",
+      end: form.end.endsWith(":00") ? form.end : form.end + ":00",
     };
 
     try {
@@ -35,17 +42,19 @@ export default function EventModal({ initial, onClose, onSaved }: Props) {
         ? await updateEvent((initial as EventOut).id, payload)
         : await createEvent(payload);
 
+      setConflict(null); // clear any previous error
       onSaved(saved, isEdit ? "update" : "create");
       onClose();
-   } catch (err: any) {
-  if (err?.response?.status === 409) {
-    alert(err.response.data.detail);   // ← shows the exact message we crafted on backend
-  } else {
-    console.error(err);
-    alert("Couldn’t save. Check the browser console for details.");
-  }
-}
+    } catch (err: any) {
+      if ((err as AxiosError)?.response?.status === 409) {
+          const data: any = (err as AxiosError).response?.data;
+          setConflict(data?.detail?.conflicts?.[0] ?? null);
 
+      } else {
+        console.error(err);
+        alert("Couldn’t save. Check the browser console for details.");
+      }
+    }
   };
 
   const handleDelete = async () => {
@@ -58,9 +67,36 @@ export default function EventModal({ initial, onClose, onSaved }: Props) {
   return (
     <div className="fixed inset-0 grid place-items-center bg-black/40 z-20">
       <div className="bg-white rounded shadow p-6 w-80 space-y-4">
-        <h2 className="text-xl font-semibold">
-          {isEdit ? "Edit Event" : "New Event"}
-        </h2>
+        {conflict && (
+          <div className="bg-red-100 text-red-800 p-2 rounded text-sm">
+            <p className="font-semibold">⛔ Time conflict</p>
+            <p>{conflict.title}</p>
+            <p>
+              {new Date(conflict.start).toLocaleTimeString([], {
+                hour: "2-digit",
+                minute: "2-digit",
+              })}{" "}
+              –{" "}
+              {new Date(conflict.end).toLocaleTimeString([], {
+                hour: "2-digit",
+                minute: "2-digit",
+              })}
+            </p>
+          </div>
+        )}
+
+        <div className="flex items-center space-x-3">
+          {initial && (initial as any).thumb && (
+            <img
+              src={(initial as any).thumb}
+              alt="upload preview"
+              className="w-12 h-12 object-cover rounded"
+            />
+          )}
+          <h2 className="text-xl font-semibold flex-1">
+            {isEdit ? "Edit Event" : "New Event"}
+          </h2>
+        </div>
 
         <label className="block">
           <span className="text-sm">Title</span>

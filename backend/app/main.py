@@ -22,6 +22,8 @@ from .schemas import EventIn, EventOut
 #new code
 # ── imports – add at the top ──────────────────────────────────────────
 from fastapi import UploadFile, File
+from fastapi.staticfiles import StaticFiles
+import uuid
 import tempfile, subprocess, re, json
 from pathlib import Path
 from dateutil import parser as dtparse        # pip install python-dateutil
@@ -43,12 +45,13 @@ def ocr_to_text(data: bytes) -> str:
 
 
 # ── naive parser: find first YYYY-MM-DD and first time range ──────────
-_date_re = re.compile(r"\b(\d{4}[-/]\d{1,2}[-/]\d{1,2})\b")
-
-# dash can be -, –, — or even two hyphens; allow AM/PM too
-_time_re = re.compile(
-    r"(\d{1,2}[:]\d{2}\s*(?:AM|PM)?)\s*[-–—]{1,2}\s*(\d{1,2}[:]\d{2}\s*(?:AM|PM)?)",
+_date_re = re.compile(
+    r"\b(\d{4}[-/]\d{1,2}[-/]\d{1,2}|\d{1,2}[-/]\d{1,2}[-/]\d{2,4}|\w+\s+\d{1,2},\s*\d{4})\b",
     re.IGNORECASE,
+)
+
+_time_re = re.compile(
+    r"(\d{1,2}[:]\d{2}\s*(?:AM|PM|am|pm)?)\s*[-–—~to]+\s*(\d{1,2}[:]\d{2}\s*(?:AM|PM|am|pm)?)"
 )
 
 def extract_event_fields(text: str) -> dict[str, str] | None:
@@ -72,13 +75,24 @@ def extract_event_fields(text: str) -> dict[str, str] | None:
 
     return {"title": title, "start": start_iso, "end": end_iso}
 
+UPLOAD_DIR = Path(__file__).resolve().parents[1] / "uploads"
+UPLOAD_DIR.mkdir(exist_ok=True)
+app.mount("/uploads", StaticFiles(directory=UPLOAD_DIR), name="uploads")
+
 
 # ── new route ---------------------------------------------------------
+
 @app.post("/uploads", status_code=201)
 async def upload_file(file: UploadFile = File(...)):
     raw = await file.read()
-    text = ocr_to_text(raw)
 
+    # 1. save original image
+    ext = (Path(file.filename).suffix or ".png").lower()
+    filename = f"{uuid.uuid4().hex}{ext}"
+    dest = UPLOAD_DIR / filename
+    dest.write_bytes(raw)
+
+    text = ocr_to_text(raw)
     print("──── OCR TEXT ────")
     print(text)
     print("──────────────────")
@@ -86,6 +100,9 @@ async def upload_file(file: UploadFile = File(...)):
     extracted = extract_event_fields(text)
     if not extracted:
         raise HTTPException(status_code=422, detail="Could not parse date/time")
+
+    # 2. add URL for frontend
+    extracted["thumb"] = f"/uploads/{filename}"
     return extracted
 
 #end new code
@@ -93,13 +110,21 @@ async def upload_file(file: UploadFile = File(...)):
 
 # Creates API
 
-
 from os import getenv
+
+origins = [
+    getenv("FRONTEND_ORIGIN", "http://localhost:5173"),
+]
+
+codespaces_origin = getenv("CODESPACES_FRONTEND")
+if codespaces_origin:
+    origins.append(codespaces_origin)
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[getenv("FRONTEND_ORIGIN", "http://localhost:5173")],
+    allow_origins=origins,
     allow_credentials=True,
-    allow_methods=["GET", "POST", "PUT", "DELETE"],
+    allow_methods=["*"],
     allow_headers=["*"],
 )
 
@@ -152,7 +177,17 @@ def create_event(data: EventIn, db: Session = Depends(get_db)):
     if conflict:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail=f"Conflicts with existing event id={conflict.id} «{conflict.title}»",
+            detail={
+                "message": "Time overlaps with another event.",
+                "conflicts": [
+                    {
+                        "id": conflict.id,
+                        "title": conflict.title,
+                        "start": conflict.start.isoformat(),
+                        "end": conflict.end.isoformat(),
+                    }
+                ],
+            },
         )
 
     # no conflict → create
@@ -172,8 +207,25 @@ def create_event(data: EventIn, db: Session = Depends(get_db)):
 @app.put("/events/{event_id}", response_model=EventOut)
 def update_event(event_id: int, payload: EventIn, db: Session = Depends(get_db)):
     overlap_stmt = select(Event).where(
-    and_(Event.id != event_id, Event.start < payload["end"], Event.end > payload["start"])
- )
+        and_(Event.id != event_id, Event.start < payload.end, Event.end > payload.start)
+    )
+    conflict = db.scalars(overlap_stmt).first()
+    if conflict:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "message": "Time overlaps with another event.",
+                "conflicts": [
+                    {
+                        "id": conflict.id,
+                        "title": conflict.title,
+                        "start": conflict.start.isoformat(),
+                        "end": conflict.end.isoformat(),
+                    }
+                ],
+            },
+        )
+
     event = db.get(Event, event_id)
     if event is None:
         raise HTTPException(status_code=404, detail="Event not found")
@@ -196,6 +248,10 @@ def delete_event(event_id: int, db: Session = Depends(get_db)):
 
     db.delete(event)
     db.commit()
+
+
+
+
 
 '''
 | Concept                    | What It Does                                                                                                        |

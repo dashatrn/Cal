@@ -25,7 +25,18 @@ export default function App() {
       .then((api) => setEvents(api.map((e) => ({ ...e, id: e.id.toString() }))))
       .catch(console.error);
 
-  useEffect(() => { void reload(); }, []);
+  useEffect(() => {
+  void listEvents()
+    .then((api) => {
+      const mapped = api.map((e) => ({ ...e, id: e.id.toString() }));
+      setEvents(mapped);
+      if (mapped.length > 0) {
+        const latest = mapped[mapped.length - 1];
+        calRef.current?.getApi().gotoDate(latest.start);
+      }
+    })
+    .catch(console.error);
+}, []);
   /** helpers */
   const gotoPrev = () => calRef.current?.getApi().prev();
   const gotoNext = () => calRef.current?.getApi().next();

@@ -1,7 +1,6 @@
 
 
 #Path use to handle file systems paths in safe, cross-platform way. used to build path to db file
-from pathlib import Path
 #use to type-hint return type of get_db func. generator implies "thing that gives one value at a time"
 from typing import Generator
 #create_engine connects app to database
@@ -30,12 +29,19 @@ __file__ → The current file (db.py)
 sqlite:///... → The format SQLAlchemy expects for SQLite file paths
 '''
 
-import os
+import os, sys
+from pathlib import Path
 
 DB_URL = os.getenv("DATABASE_URL") or f"sqlite:///{str(Path(__file__).resolve().parents[1] / 'cal.db')}"
-engine = create_engine(DB_URL, echo=False, future=True)
 
 
+
+DB_URL = os.getenv("DATABASE_URL") 
+if not DB_URL:
+    print("❌  DATABASE_URL missing – add it to backend/.env", file=sys.stderr)
+    sys.exit(1)
+
+engine = create_engine(DB_URL, echo=False, future=True, pool_pre_ping=True)
 '''engine manages the connection to the SQLite file.
 echo=False: don’t print every query to the terminal.
 future=True: use newer SQLAlchemy behavior.
