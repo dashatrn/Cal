@@ -32,7 +32,6 @@ sqlite:///... → The format SQLAlchemy expects for SQLite file paths
 import os, sys
 from pathlib import Path
 
-DB_URL = os.getenv("DATABASE_URL") or f"sqlite:///{str(Path(__file__).resolve().parents[1] / 'cal.db')}"
 
 
 

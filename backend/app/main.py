@@ -119,11 +119,9 @@ origins = [
 codespaces_origin = getenv("CODESPACES_FRONTEND")
 if codespaces_origin:
     origins.append(codespaces_origin)
-
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,
-    allow_credentials=True,
+    allow_origins=["*"],      # dev-only; lock down later
     allow_methods=["*"],
     allow_headers=["*"],
 )

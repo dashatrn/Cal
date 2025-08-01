@@ -1,0 +1,43 @@
+version: "3.9"
+
+services:
+  db:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_DB: neondb
+      POSTGRES_USER: pguser
+      POSTGRES_PASSWORD: pgpass
+    ports: ["5432:5432"]
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  backend:
+    build: ./backend
+    env_file: .env.docker
+    volumes:
+      - ./backend:/app/backend          # hot-reload Python
+      - ./uploads:/app/uploads          # keep screenshots
+    ports: ["8000:8000"]
+    depends_on: [db]
+    command: >
+      sh -c "
+        alembic upgrade head &&
+        uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+      "
+
+  frontend:
+    build: ./frontend/cal-frontend
+    volumes:
+      - ./frontend/cal-frontend:/usr/src/app        # hot-reload React/Vite
+    environment:
+      - VITE_API_URL=http://localhost:8000          # browser talks to host-mapped backend
+    ports: ["5173:5173"]
+    depends_on: [backend]
+
+    # 👇 THIS is what exposes the dev-server
+    command: npm run dev -- --host 0.0.0.0 --port 5173
+    # yarn users:  yarn dev --host 0.0.0.0 --port 5173
+    # pnpm users:  pnpm run dev -- --host 0.0.0.0 --port 5173
+
+volumes:
+  pgdata:
