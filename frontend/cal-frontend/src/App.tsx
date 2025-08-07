@@ -66,8 +66,7 @@ export default function App() {
 
   /* ───────────────────────── render ─────────────────────────────── */
   return (
-    <div className="min-h-screen flex flex-col bg-gray-50 dark:bg-gray-900">
-      {/* ── header ─────────────────────────────────────────────── */}
+ <div className="flex flex-col h-full bg-gray-50 dark:bg-gray-900">      {/* ── header ─────────────────────────────────────────────── */}
     <header className="h-16 relative flex items-center justify-center bg-white shadow">
       {/* + New – fixed left */}
       <button onClick={() => setShowNew(true)}
