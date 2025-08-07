@@ -1,4 +1,21 @@
+html.dark {
+  color-scheme: dark;
+}
+/* FullCalendar should stretch when its parent is flex-1 */
+.fc, .fc-scroller-liquid-absolute {
+  height: 100% !important;
+}
+/* 1-A  make the page 100 % tall */
+html, body, #root { height: 100%; }
+
+/* 1-B  drop the demo layout from Vite */
+#root {
+  max-width: none;
+  margin: 0;
+  padding: 0;
+}
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
+/* keep anything you had below */
