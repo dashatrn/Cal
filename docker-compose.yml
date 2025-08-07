@@ -29,8 +29,6 @@ services:
     build: ./frontend/cal-frontend
     volumes:
       - ./frontend/cal-frontend:/usr/src/app        # hot-reload React/Vite
-    environment:
-      - VITE_API_URL=http://localhost:8000          # browser talks to host-mapped backend
     ports: ["5173:5173"]
     depends_on: [backend]
 
