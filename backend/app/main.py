@@ -248,7 +248,22 @@ def delete_event(event_id: int, db: Session = Depends(get_db)):
     db.commit()
 
 
+from pydantic import BaseModel
 
+class ParseIn(BaseModel):
+    prompt: str
+
+@app.post("/parse")
+def parse_prompt(body: ParseIn):
+    """
+    Very simple stub: reuse the same regex/dateutil parser we use for OCR.
+    Returns partial fields; frontend will show a preview and can override.
+    """
+    text = (body.prompt or "").strip()
+    if not text:
+        return {}
+    extracted = extract_event_fields(text)
+    return extracted or {}
 
 
 '''

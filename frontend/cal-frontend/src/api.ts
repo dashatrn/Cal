@@ -18,7 +18,23 @@ export const api = axios.create({
 export interface EventIn  { title: string; start: string; end: string }
 export interface EventOut extends EventIn { id: number }
 
-export const listEvents  = ()                   => api.get <EventOut[]>("/events").then(r => r.data);
-export const createEvent = (e: EventIn)         => api.post<EventOut> ("/events",        e).then(r => r.data);
-export const updateEvent = (id: number, e: EventIn) => api.put <EventOut> (`/events/${id}`, e).then(r => r.data);
-export const deleteEvent = (id: number)         => api.delete        (`/events/${id}`);
+// Calendar CRUD
+export const listEvents  = ()                      => api.get <EventOut[]>("/events").then(r => r.data);
+export const createEvent = (e: EventIn)            => api.post<EventOut> ("/events",        e).then(r => r.data);
+export const updateEvent = (id: number, e: EventIn)=> api.put <EventOut> (`/events/${id}`,  e).then(r => r.data);
+export const deleteEvent = (id: number)            => api.delete        (`/events/${id}`);
+
+// --- NEW: parsing helpers -----------------------------------------------------
+export type ParsedFields = Partial<EventIn> & { thumb?: string };
+
+// Use fetch for multipart so we don’t fight axios JSON headers
+export async function uploadImageForParse(file: File): Promise<ParsedFields> {
+  const body = new FormData();
+  body.append("file", file);
+  const res = await fetch(`${BASE_URL}/uploads`, { method: "POST", body });
+  if (!res.ok) throw new Error("upload failed");
+  return res.json();
+}
+
+export const parsePrompt = (prompt: string) =>
+  api.post<ParsedFields>("/parse", { prompt }).then(r => r.data);

@@ -4,34 +4,41 @@ import dayGridPlugin from "@fullcalendar/daygrid";
 import timeGridPlugin from "@fullcalendar/timegrid";
 import interactionPlugin from "@fullcalendar/interaction";
 import type { DateClickArg } from "@fullcalendar/interaction";
-import type { EventClickArg, EventInput } from "@fullcalendar/core"
+import type { EventClickArg, EventInput } from "@fullcalendar/core";
 
 import { listEvents } from "./api";
-import type { EventOut as ApiEvent } from "./api";
+import type { EventOut as ApiEvent, EventIn } from "./api";
 import EventModal from "./EventModal";
-import UploadDrop from "./UploadDrop";
-import NewEventModal from "./NewEventModal";   // NEW
+import NewEventModal from "./NewEventModal";
 
-import "./index.css";   // tailwind styles
-import "./App.css";     // component-specific tweaks
+import "./index.css";
+import "./App.css";
 
 type CalEvent = Omit<ApiEvent, "id"> & { id: string };
 
 export default function App() {
-  /* ───────────────────────── state / refs ───────────────────────── */
   const [events, setEvents] = useState<CalEvent[]>([]);
   const [modalInit, setModalInit] = useState<ApiEvent | undefined | null>(null);
+  const [showNew, setShowNew] = useState(false);
   const calRef = useRef<FullCalendar | null>(null);
-  const [showNew, setShowNew] = useState(false);   // NEW
-  /* ───────────────────────── helpers ────────────────────────────── */
-  const fetchEvents = () =>
+
+  const gotoDate  = (iso: string) => calRef.current?.getApi().gotoDate(iso);
+  const gotoPrev  = () => calRef.current?.getApi().prev();
+  const gotoNext  = () => calRef.current?.getApi().next();
+
+  const reload = () =>
     listEvents()
       .then((api) => setEvents(api.map((e) => ({ ...e, id: e.id.toString() }))))
       .catch(console.error);
 
-  const gotoPrev = () => calRef.current?.getApi().prev();
-  const gotoNext = () => calRef.current?.getApi().next();
-  const gotoDate  = (iso: string) => calRef.current?.getApi().gotoDate(iso);
+  useEffect(() => {
+    reload().then(() => {
+      // if we already have events, jump to newest
+      const last = events.at(-1);
+      if (last) gotoDate(last.start);
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const openCreate = (dateISO?: string) =>
     setModalInit(
@@ -44,41 +51,44 @@ export default function App() {
 
   const handleSaved = (e?: ApiEvent) => {
     if (e) gotoDate(e.start);
-    fetchEvents();
+    reload();
     setModalInit(null);
   };
-  
 
-  const handleNewSubmit = (p: { prompt: string; files: File[] }) => {
-    console.log("NEW SUBMIT", p);   // we’ll fill this in Phase-2
+  // Coming from NewEventModal “Next”
+  const handleNewSubmit = (p: Partial<EventIn> & { thumb?: string }) => {
+    // Build a safe initial object for the confirmation modal
+    const now = new Date();
+    const defStart = new Date(now); defStart.setMinutes(0,0,0);
+    const defEnd   = new Date(defStart); defEnd.setHours(defStart.getHours() + 1);
+
+    const initial: ApiEvent = {
+      id: 0,
+      title: p.title ?? "",
+      start: p.start ?? defStart.toISOString().slice(0,19),
+      end:   p.end   ?? defEnd.toISOString().slice(0,19),
+      // thumb is handled by EventModal via (initial as any).thumb
+    } as any;
+
+    (initial as any).thumb = p.thumb;
+    setModalInit(initial);
     setShowNew(false);
   };
-  /* ───────────────────────── initial load ───────────────────────── */
-  useEffect(() => {
-    listEvents()
-      .then((api) => {
-        const mapped = api.map((e) => ({ ...e, id: e.id.toString() }));
-        setEvents(mapped);
-        if (mapped.length) gotoDate(mapped[mapped.length - 1].start);
-      })
-      .catch(console.error);
-  }, []);
 
-  /* ───────────────────────── render ─────────────────────────────── */
   return (
- <div className="flex flex-col h-full bg-gray-50 dark:bg-gray-900">      {/* ── header ─────────────────────────────────────────────── */}
-    <header className="h-16 relative flex items-center justify-center bg-white shadow">
-      {/* + New – fixed left */}
-      <button onClick={() => setShowNew(true)}
-              className="absolute left-6 bg-black text-white px-3 py-1 rounded">
-        + New
-      </button>
+    <div className="min-h-screen flex flex-col bg-gray-50 dark:bg-gray-900">
+      {/* Header */}
+      <header className="h-16 relative flex items-center justify-center bg-white shadow">
+        <button
+          onClick={() => setShowNew(true)}
+          className="absolute left-6 bg-black text-white px-3 py-1 rounded"
+        >
+          + New
+        </button>
+        <h1 className="text-xl font-semibold select-none">Cal</h1>
+      </header>
 
-      {/* Title – naturally centered because header uses justify-center */}
-      <h1 className="text-xl font-semibold select-none">Cal</h1>
-    </header>
-
-      {/* ── calendar toolbar (view switch + arrows) ─────────────── */}
+      {/* Toolbar */}
       <div className="h-12 flex items-center justify-between px-4 md:px-8 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
         <div className="space-x-1 text-sm">
           {(["dayGridDay", "timeGridWeek", "dayGridMonth"] as const).map((v) => (
@@ -92,25 +102,26 @@ export default function App() {
           ))}
         </div>
 
+        {/* Edge-hugging arrows */}
         <div className="space-x-1">
-      <button
-        onClick={gotoPrev}
-        className="hidden md:grid fixed left-2 top-1/2 -translate-y-1/2
-                  w-10 h-10 bg-white rounded-full shadow place-content-center">
-        ‹
-      </button>
-
-      <button
-        onClick={gotoNext}
-        className="hidden md:grid fixed right-2 top-1/2 -translate-y-1/2
-                  w-10 h-10 bg-white rounded-full shadow place-content-center">
-        ›
-      </button>
+          <button
+            onClick={gotoPrev}
+            className="hidden md:grid fixed left-2 top-1/2 -translate-y-1/2 w-10 h-10 bg-white rounded-full shadow place-content-center"
+          >
+            ‹
+          </button>
+          <button
+            onClick={gotoNext}
+            className="hidden md:grid fixed right-2 top-1/2 -translate-y-1/2 w-10 h-10 bg-white rounded-full shadow place-content-center"
+          >
+            ›
+          </button>
         </div>
       </div>
 
-      {/* ── calendar ────────────────────────────────────────────── */}
-<main className="relative flex-1 min-h-0 px-4 md:px-10 pb-4">        <FullCalendar
+      {/* Calendar (fills remaining height) */}
+      <main className="relative flex-1 min-h-0 px-4 md:px-10 pb-4">
+        <FullCalendar
           ref={calRef}
           plugins={[dayGridPlugin, timeGridPlugin, interactionPlugin]}
           initialView="timeGridWeek"
@@ -126,7 +137,7 @@ export default function App() {
         />
       </main>
 
-      {/* ── modal ──────────────────────────────────────────────── */}
+      {/* Confirmation modal */}
       {modalInit !== null && (
         <EventModal
           initial={modalInit ?? undefined}
@@ -135,6 +146,7 @@ export default function App() {
         />
       )}
 
+      {/* New flow modal */}
       <NewEventModal
         open={showNew}
         onClose={() => setShowNew(false)}
