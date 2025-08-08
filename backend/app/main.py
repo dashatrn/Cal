@@ -247,7 +247,6 @@ def delete_event(event_id: int, db: Session = Depends(get_db)):
     db.delete(event)
     db.commit()
 
-
 from pydantic import BaseModel
 
 class ParseIn(BaseModel):
@@ -256,8 +255,8 @@ class ParseIn(BaseModel):
 @app.post("/parse")
 def parse_prompt(body: ParseIn):
     """
-    Very simple stub: reuse the same regex/dateutil parser we use for OCR.
-    Returns partial fields; frontend will show a preview and can override.
+    Reuse the OCR parser for free text. Returns partial (title/start/end).
+    Frontend shows a live preview and can override.
     """
     text = (body.prompt or "").strip()
     if not text:
