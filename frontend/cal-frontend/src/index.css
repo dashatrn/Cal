@@ -1,3 +1,13 @@
+/* Stable viewport height (works on iOS Safari) */
+:root { --vh: 100dvh; }
+@supports not (height: 100dvh) {
+  :root { --vh: 100vh; }
+}
+
+/* Make the app shell use full viewport height */
+html, body, #root { height: var(--vh); }
+
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -17,3 +27,7 @@ html.dark { color-scheme: dark; }
   margin: 0;
   padding: 0;
 }
+
+/* DEBUG — remove after checking */
+header { outline: 1px dashed #ddd; }
+main   { outline: 1px dashed #bbb; }
