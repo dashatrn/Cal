@@ -1,33 +1,21 @@
-/* Stable viewport height (works on iOS Safari) */
+/* Stable viewport height (iOS Safari friendly) */
 :root { --vh: 100dvh; }
 @supports not (height: 100dvh) {
   :root { --vh: 100vh; }
 }
 
-/* Make the app shell use full viewport height */
+/* Make the app root exactly one viewport tall */
 html, body, #root { height: var(--vh); }
-
 
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-/* Make the layout height-driven */
-html, body, #root { height: 100%; }
+/* Dark color-scheme preference */
 html.dark { color-scheme: dark; }
 
-/* The app shell uses flex; let the calendar fill the remainder */
-.fc, .fc-scroller-liquid-absolute {
-  height: 100% !important;
-}
+/* Let FullCalendar fill its parent */
+.fc, .fc-scroller-liquid-absolute { height: 100% !important; }
+.fc-scroller { overflow-y: auto !important; }
 
-/* kill any leftover Vite demo layout from other files */
-#root {
-  max-width: none;
-  margin: 0;
-  padding: 0;
-}
-
-/* DEBUG — remove after checking */
-header { outline: 1px dashed #ddd; }
-main   { outline: 1px dashed #bbb; }
+/* (Intentionally no extra #root sizing here; that lives in App.css) */

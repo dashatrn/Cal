@@ -11,6 +11,17 @@ interface Props {
 
 const WEEK = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"] as const;
 
+/** Parse an ISO without zone (YYYY-MM-DDTHH:mm[:ss]) as LOCAL time (not UTC). */
+function parseLocalIso(iso: string): Date {
+  // Safety: handle "YYYY-MM-DDTHH:mm" or "YYYY-MM-DDTHH:mm:ss"
+  const [d, t = "00:00:00"] = iso.split("T");
+  const [y, m, day] = d.split("-").map(n => parseInt(n, 10));
+  const [hh, mm, ss = "0"] = t.split(":");
+  return new Date(y, (m as number) - 1, parseInt(day,10), parseInt(hh,10), parseInt(mm,10), parseInt(ss,10));
+}
+const fmtTimeLocal = (iso: string) =>
+  parseLocalIso(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+
 export default function EventModal({ initial, onClose, onSaved }: Props) {
   const isoNow = new Date().toISOString().slice(0, 16); // yyyy-mm-ddThh:mm
 
@@ -76,8 +87,6 @@ export default function EventModal({ initial, onClose, onSaved }: Props) {
       out.push({ title: form.title, start: startIso, end: endIso });
     }
 
-    // If none selected matched the very first day but user expected it,
-    // that's by design: only checked weekdays are generated.
     return out;
   };
 
@@ -92,7 +101,6 @@ export default function EventModal({ initial, onClose, onSaved }: Props) {
 
     try {
       if (!isEdit && anyRepeat) {
-        // Create many occurrences
         const batch = enumerateRepeats();
         if (batch.length === 0) {
           alert("No matching days between start and until.");
@@ -101,7 +109,6 @@ export default function EventModal({ initial, onClose, onSaved }: Props) {
         for (const ev of batch) {
           try {
             const saved = await createEvent(ev);
-            // keep jumping calendar to the latest saved date
             onSaved(saved, "create");
           } catch (err: any) {
             if ((err as AxiosError)?.response?.status === 409) {
@@ -119,7 +126,6 @@ export default function EventModal({ initial, onClose, onSaved }: Props) {
         return;
       }
 
-      // Single create / update
       const saved = isEdit
         ? await updateEvent((initial as EventOut).id, payload)
         : await createEvent(payload);
@@ -153,15 +159,7 @@ export default function EventModal({ initial, onClose, onSaved }: Props) {
             <p className="font-semibold">⛔ Time conflict</p>
             <p>{conflict.title}</p>
             <p>
-              {new Date(conflict.start).toLocaleTimeString([], {
-                hour: "2-digit",
-                minute: "2-digit",
-              })}{" "}
-              –{" "}
-              {new Date(conflict.end).toLocaleTimeString([], {
-                hour: "2-digit",
-                minute: "2-digit",
-              })}
+              {fmtTimeLocal(conflict.start)} – {fmtTimeLocal(conflict.end)}
             </p>
           </div>
         )}
