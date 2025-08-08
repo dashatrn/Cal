@@ -1,31 +1,31 @@
 // src/api.ts
 import axios from "axios";
 
-// build-time value from .env  (works in production builds & PWAs)
 const envURL = import.meta.env.VITE_API_URL as string | undefined;
-
-// dev-time heuristic (when you’re on https://…-5173.app.github.dev)
 const devURL = `${window.location.protocol}//${window.location.hostname.replace("-5173", "-8000")}`;
-
-// final choice
-const BASE_URL = (envURL ?? devURL).replace(/\/+$/, "");  // strip trailing “/”
+const BASE_URL = (envURL ?? devURL).replace(/\/+$/, "");
 
 export const api = axios.create({
   baseURL: BASE_URL,
   headers: { "Content-Type": "application/json" },
 });
 
+// Event models (naive/local datetimes)
 export interface EventIn  { title: string; start: string; end: string }
 export interface EventOut extends EventIn { id: number }
 
 // Calendar CRUD
-export const listEvents  = ()                      => api.get <EventOut[]>("/events").then(r => r.data);
-export const createEvent = (e: EventIn)            => api.post<EventOut> ("/events",        e).then(r => r.data);
-export const updateEvent = (id: number, e: EventIn)=> api.put <EventOut> (`/events/${id}`,  e).then(r => r.data);
-export const deleteEvent = (id: number)            => api.delete        (`/events/${id}`);
+export const listEvents  = ()                         => api.get <EventOut[]>("/events").then(r => r.data);
+export const createEvent = (e: EventIn)               => api.post<EventOut> ("/events",        e).then(r => r.data);
+export const updateEvent = (id: number, e: EventIn)   => api.put <EventOut> (`/events/${id}`,  e).then(r => r.data);
+export const deleteEvent = (id: number)               => api.delete        (`/events/${id}`);
 
-// --- NEW: parsing helpers -----------------------------------------------------
-export type ParsedFields = Partial<EventIn> & { thumb?: string };
+// Parsing helpers
+export type ParsedFields = Partial<EventIn> & {
+  thumb?: string;
+  repeatDays?: number[];      // 0=Sun..6=Sat
+  repeatUntil?: string;       // YYYY-MM-DD
+};
 
 // Use fetch for multipart so we don’t fight axios JSON headers
 export async function uploadImageForParse(file: File): Promise<ParsedFields> {

@@ -1,21 +1,22 @@
-/* Stable viewport height (iOS Safari friendly) */
-:root { --vh: 100dvh; }
-@supports not (height: 100dvh) {
-  :root { --vh: 100vh; }
-}
+/* src/index.css */
 
-/* Make the app root exactly one viewport tall */
-html, body, #root { height: var(--vh); }
-
+/* keep Tailwind */
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-/* Dark color-scheme preference */
+/* optional, but harmless */
 html.dark { color-scheme: dark; }
 
-/* Let FullCalendar fill its parent */
-.fc, .fc-scroller-liquid-absolute { height: 100% !important; }
-.fc-scroller { overflow-y: auto !important; }
+/* make app container sane; no calendar height rules here */
+html, body, #root { min-height: 100%; }
 
-/* (Intentionally no extra #root sizing here; that lives in App.css) */
+#root {
+  max-width: none;
+  margin: 0;
+  padding: 0;
+}
+
+/* remove debug lines if you still have them */
+/* header { outline: none; }
+main { outline: none; } */

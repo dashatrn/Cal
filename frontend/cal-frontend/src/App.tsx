@@ -16,10 +16,15 @@ import "./App.css";
 
 type CalEvent = Omit<ApiEvent, "id"> & { id: string };
 
+const HEADER_H = 64;   // h-16
+const TOOLBAR_H = 48;  // h-12
+const EXTRA_PAD = 16;  // breathing room
+
 export default function App() {
   const [events, setEvents] = useState<CalEvent[]>([]);
   const [modalInit, setModalInit] = useState<ApiEvent | undefined | null>(null);
   const [showNew, setShowNew] = useState(false);
+  const [vh, setVh] = useState<number>(typeof window !== "undefined" ? window.innerHeight : 800);
   const calRef = useRef<FullCalendar | null>(null);
 
   const gotoDate  = (iso: string) => calRef.current?.getApi().gotoDate(iso);
@@ -39,12 +44,14 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Let FullCalendar recompute after mount & on resize
   useEffect(() => {
-    const update = () => calRef.current?.getApi().updateSize();
-    setTimeout(update, 0);
-    window.addEventListener("resize", update);
-    return () => window.removeEventListener("resize", update);
+    const onResize = () => {
+      setVh(window.innerHeight);
+      calRef.current?.getApi().updateSize();
+    };
+    setTimeout(onResize, 0);
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
   }, []);
 
   const openCreate = (dateISO?: string) =>
@@ -53,6 +60,7 @@ export default function App() {
         ? { id: 0, title: "", start: dateISO + "T00:00", end: dateISO + "T01:00" }
         : undefined,
     );
+
   const openEdit = (evt: ApiEvent) => setModalInit(evt);
 
   const handleSaved = (e?: ApiEvent) => {
@@ -61,7 +69,7 @@ export default function App() {
     setModalInit(null);
   };
 
-  const handleNewSubmit = (p: Partial<EventIn> & { thumb?: string }) => {
+  const handleNewSubmit = (p: Partial<EventIn> & { thumb?: string; repeatDays?: number[]; repeatUntil?: string }) => {
     const now = new Date();
     const defStart = new Date(now); defStart.setMinutes(0,0,0);
     const defEnd   = new Date(defStart); defEnd.setHours(defStart.getHours() + 1);
@@ -74,74 +82,76 @@ export default function App() {
     } as any;
 
     (initial as any).thumb = p.thumb;
+    (initial as any).repeatDays = p.repeatDays;
+    (initial as any).repeatUntil = p.repeatUntil;
+
     setModalInit(initial);
     setShowNew(false);
   };
 
+  const CAL_HEIGHT = Math.max(320, vh - HEADER_H - TOOLBAR_H - EXTRA_PAD);
+
   return (
-    /* EXACT viewport height from CSS var; flex column gives leftover to <main> */
-    <div className="flex flex-col h-[var(--vh)] bg-gray-50 dark:bg-gray-900">
-      {/* Header (64px) */}
-      <header className="h-16 relative flex items-center justify-center bg-white shadow">
-        <button
-          onClick={() => setShowNew(true)}
-          className="absolute left-6 bg-black text-white px-3 py-1 rounded"
-        >
-          + New
-        </button>
-        <h1 className="text-xl font-semibold select-none">Cal</h1>
-      </header>
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+      <div className="app-shell flex min-h-screen flex-col w-full">
+        <header className="h-16 relative flex items-center justify-center bg-white shadow">
+          <button
+            onClick={() => setShowNew(true)}
+            className="absolute left-6 bg-black text-white px-3 py-1 rounded"
+          >
+            + New
+          </button>
+          <h1 className="text-xl font-semibold select-none">Cal</h1>
+        </header>
 
-      {/* Toolbar (48px) */}
-      <div className="h-12 flex items-center justify-between px-4 md:px-8 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
-        <div className="space-x-1 text-sm">
-          {(["dayGridDay", "timeGridWeek", "dayGridMonth"] as const).map((v) => (
+        <div className="h-12 flex items-center justify-between px-4 md:px-8 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
+          <div className="space-x-1 text-sm">
+            {(["dayGridDay", "timeGridWeek", "dayGridMonth"] as const).map((v) => (
+              <button
+                key={v}
+                onClick={() => calRef.current?.getApi().changeView(v)}
+                className="px-2 py-1 rounded hover:bg-gray-100 dark:hover:bg-gray-700"
+              >
+                {v === "dayGridDay" ? "Day" : v === "timeGridWeek" ? "Week" : "Month"}
+              </button>
+            ))}
+          </div>
+
+          <div className="space-x-1">
             <button
-              key={v}
-              onClick={() => calRef.current?.getApi().changeView(v)}
-              className="px-2 py-1 rounded hover:bg-gray-100 dark:hover:bg-gray-700"
+              onClick={gotoPrev}
+              className="hidden md:grid fixed left-2 top-1/2 -translate-y-1/2 w-10 h-10 bg-white rounded-full shadow place-content-center"
             >
-              {v === "dayGridDay" ? "Day" : v === "timeGridWeek" ? "Week" : "Month"}
+              ‹
             </button>
-          ))}
+            <button
+              onClick={gotoNext}
+              className="hidden md:grid fixed right-2 top-1/2 -translate-y-1/2 w-10 h-10 bg-white rounded-full shadow place-content-center"
+            >
+              ›
+            </button>
+          </div>
         </div>
 
-        {/* Edge-hugging arrows */}
-        <div className="space-x-1">
-          <button
-            onClick={gotoPrev}
-            className="hidden md:grid fixed left-2 top-1/2 -translate-y-1/2 w-10 h-10 bg-white rounded-full shadow place-content-center"
-          >
-            ‹
-          </button>
-          <button
-            onClick={gotoNext}
-            className="hidden md:grid fixed right-2 top-1/2 -translate-y-1/2 w-10 h-10 bg-white rounded-full shadow place-content-center"
-          >
-            ›
-          </button>
-        </div>
+        <main className="relative flex-1 min-h-0 px-0 md:px-0 pb-4">
+          <FullCalendar
+            ref={calRef}
+            plugins={[dayGridPlugin, timeGridPlugin, interactionPlugin]}
+            initialView="timeGridWeek"
+            headerToolbar={false}
+            timeZone="local"                 // <-- make rendering explicitly local
+            height={CAL_HEIGHT}
+            eventDisplay="block"
+            events={events as EventInput[]}
+            dateClick={(arg: DateClickArg) => openCreate(arg.dateStr)}
+            eventClick={(arg: EventClickArg) => {
+              const e = events.find((x) => x.id === arg.event.id);
+              if (e) openEdit({ ...e, id: +e.id });
+            }}
+          />
+        </main>
       </div>
 
-      {/* Calendar fills the remainder */}
-      <main className="flex-1 min-h-0 px-0 md:px-0 pb-4">
-        <FullCalendar
-          ref={calRef}
-          plugins={[dayGridPlugin, timeGridPlugin, interactionPlugin]}
-          initialView="timeGridWeek"
-          headerToolbar={false}
-          height="100%"             /* critical: take all of <main> */
-          eventDisplay="block"
-          events={events as EventInput[]}
-          dateClick={(arg: DateClickArg) => openCreate(arg.dateStr)}
-          eventClick={(arg: EventClickArg) => {
-            const e = events.find((x) => x.id === arg.event.id);
-            if (e) openEdit({ ...e, id: +e.id });
-          }}
-        />
-      </main>
-
-      {/* Modals */}
       {modalInit !== null && (
         <EventModal
           initial={modalInit ?? undefined}
@@ -149,6 +159,7 @@ export default function App() {
           onSaved={handleSaved}
         />
       )}
+
       <NewEventModal
         open={showNew}
         onClose={() => setShowNew(false)}

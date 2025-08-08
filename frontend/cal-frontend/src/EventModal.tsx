@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { AxiosError } from "axios";
 import type { EventOut, EventIn } from "./api";
 import { createEvent, updateEvent, deleteEvent } from "./api";
@@ -11,13 +11,19 @@ interface Props {
 
 const WEEK = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"] as const;
 
-/** Parse an ISO without zone (YYYY-MM-DDTHH:mm[:ss]) as LOCAL time (not UTC). */
+/** Parse ISO without zone (YYYY-MM-DDTHH:mm[:ss]) as LOCAL time. */
 function parseLocalIso(iso: string): Date {
-  // Safety: handle "YYYY-MM-DDTHH:mm" or "YYYY-MM-DDTHH:mm:ss"
   const [d, t = "00:00:00"] = iso.split("T");
-  const [y, m, day] = d.split("-").map(n => parseInt(n, 10));
-  const [hh, mm, ss = "0"] = t.split(":");
-  return new Date(y, (m as number) - 1, parseInt(day,10), parseInt(hh,10), parseInt(mm,10), parseInt(ss,10));
+  const [y, m, day] = d.split("-").map(n => parseInt(n, 10)); // numbers
+  const [hh, mm, ss = "0"] = t.split(":");                    // strings
+  return new Date(
+    y,
+    m - 1,
+    day,
+    parseInt(hh, 10),
+    parseInt(mm, 10),
+    parseInt(ss, 10)
+  );
 }
 const fmtTimeLocal = (iso: string) =>
   parseLocalIso(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
@@ -50,6 +56,20 @@ export default function EventModal({ initial, onClose, onSaved }: Props) {
   });
   const [repeatUntil, setRepeatUntil] = useState<string>(""); // yyyy-mm-dd
 
+  // Prefill repeat from initial (if parser provided)
+  useEffect(() => {
+    const days: number[] | undefined = (initial as any)?.repeatDays;
+    const until: string | undefined = (initial as any)?.repeatUntil;
+    if ((days && days.length) || until) {
+      const next = { ...repeatDays };
+      days?.forEach(d => { next[d] = true; });
+      setRepeatDays(next);
+      if (until) setRepeatUntil(until);
+      setRepeatOpen(true);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const toggleDay = (d: number) =>
     setRepeatDays({ ...repeatDays, [d]: !repeatDays[d] });
 
@@ -57,11 +77,11 @@ export default function EventModal({ initial, onClose, onSaved }: Props) {
 
   // Helpers
   const isoWithSeconds = (s: string) =>
-    s.length === 16 ? s + ":00" : s; // normalize yyyy-mm-ddThh:mm[:ss]
+    s.length === 16 ? s + ":00" : s;
 
   const sameTimeOnDate = (baseStartIso: string, baseEndIso: string, ymd: string) => {
     const [datePart] = baseStartIso.split("T");
-    const startTime = baseStartIso.slice(datePart.length + 1); // hh:mm[:ss]
+    const startTime = baseStartIso.slice(datePart.length + 1);
     const endDuration =
       new Date(isoWithSeconds(baseEndIso)).getTime() -
       new Date(isoWithSeconds(baseStartIso)).getTime();
@@ -86,11 +106,8 @@ export default function EventModal({ initial, onClose, onSaved }: Props) {
       const { startIso, endIso } = sameTimeOnDate(form.start, form.end, ymd);
       out.push({ title: form.title, start: startIso, end: endIso });
     }
-
     return out;
   };
-
-  // ------------------------------------------------------------------
 
   const handleSave = async () => {
     const payload: EventIn = {
@@ -114,7 +131,7 @@ export default function EventModal({ initial, onClose, onSaved }: Props) {
             if ((err as AxiosError)?.response?.status === 409) {
               const data: any = (err as AxiosError).response?.data;
               setConflict(data?.detail?.conflicts?.[0] ?? null);
-              return; // stop on first conflict
+              return;
             } else {
               console.error(err);
               alert("Couldn’t save one of the repeats. Check the console.");
@@ -158,9 +175,7 @@ export default function EventModal({ initial, onClose, onSaved }: Props) {
           <div className="bg-red-100 text-red-800 p-2 rounded text-sm">
             <p className="font-semibold">⛔ Time conflict</p>
             <p>{conflict.title}</p>
-            <p>
-              {fmtTimeLocal(conflict.start)} – {fmtTimeLocal(conflict.end)}
-            </p>
+            <p>{fmtTimeLocal(conflict.start)} – {fmtTimeLocal(conflict.end)}</p>
           </div>
         )}
 

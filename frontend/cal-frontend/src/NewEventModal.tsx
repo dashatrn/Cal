@@ -1,13 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { EventIn } from "./api";
 import { uploadImageForParse, parsePrompt } from "./api";
+import type { ParsedFields } from "./api";  // <-- type-only
 
-type PartialEvent = Partial<EventIn> & { thumb?: string };
+type PartialEvent = ParsedFields;
 
 interface Props {
   open: boolean;
   onClose(): void;
-  onSubmit(e: PartialEvent): void; // we’ll prefill the next modal; can be partial
+  onSubmit(e: PartialEvent): void;
 }
 
 export default function NewEventModal({ open, onClose, onSubmit }: Props) {
@@ -17,7 +17,6 @@ export default function NewEventModal({ open, onClose, onSubmit }: Props) {
   const [busy, setBusy] = useState(false);
   const dropRef = useRef<HTMLLabelElement | null>(null);
 
-  // Debounced prompt -> /parse
   useEffect(() => {
     if (!open) return;
     const t = setTimeout(async () => {
@@ -29,17 +28,16 @@ export default function NewEventModal({ open, onClose, onSubmit }: Props) {
       } catch (e) {
         console.error(e);
       }
-    }, 600); // debounce
+    }, 600);
     return () => clearTimeout(t);
   }, [prompt, open]);
 
-  // Handle file selection / drop (only the first file for now)
   const handleFiles = async (files: FileList | null) => {
     const f = files?.[0];
     if (!f) return;
     setBusy(true);
     try {
-      const parsed = await uploadImageForParse(f); // returns title/start/end, +thumb
+      const parsed = await uploadImageForParse(f);
       setFromImage(parsed);
     } catch (e) {
       console.error(e);
@@ -49,7 +47,6 @@ export default function NewEventModal({ open, onClose, onSubmit }: Props) {
     }
   };
 
-  // Merge strategy: prompt overrides image fields if present
   const merged: PartialEvent = useMemo(() => {
     const img = fromImage ?? {};
     const txt = fromText ?? {};
@@ -58,15 +55,18 @@ export default function NewEventModal({ open, onClose, onSubmit }: Props) {
       title: txt.title || img.title,
       start: txt.start || img.start,
       end: txt.end || img.end,
+      repeatDays: txt.repeatDays || img.repeatDays,
+      repeatUntil: txt.repeatUntil || img.repeatUntil,
     };
   }, [fromImage, fromText]);
 
   if (!open) return null;
 
+  const dayNames = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+
   return (
     <div className="fixed inset-0 z-30 grid place-items-center bg-black/40">
       <div className="w-[680px] max-w-[92vw] bg-white rounded shadow-lg overflow-hidden">
-        {/* Header */}
         <div className="px-5 py-4 border-b flex items-center justify-between">
           <h2 className="text-lg font-semibold">New</h2>
           <button onClick={onClose} className="text-sm opacity-70 hover:opacity-100">
@@ -74,9 +74,7 @@ export default function NewEventModal({ open, onClose, onSubmit }: Props) {
           </button>
         </div>
 
-        {/* Body */}
         <div className="p-5 grid gap-4">
-          {/* Drag & Drop */}
           <label
             ref={dropRef}
             onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = "copy"; }}
@@ -90,11 +88,7 @@ export default function NewEventModal({ open, onClose, onSubmit }: Props) {
               {busy && <p className="text-xs mt-2">Scanning…</p>}
               {fromImage?.thumb && (
                 <div className="mt-3 flex items-center gap-2 justify-center">
-                  <img
-                    className="w-12 h-12 object-cover rounded"
-                    src={fromImage.thumb}
-                    alt="preview"
-                  />
+                  <img className="w-12 h-12 object-cover rounded" src={fromImage.thumb} alt="preview" />
                   <span className="text-xs text-gray-500">image attached</span>
                 </div>
               )}
@@ -107,36 +101,25 @@ export default function NewEventModal({ open, onClose, onSubmit }: Props) {
             />
           </label>
 
-          {/* Prompt */}
           <div className="grid gap-2">
             <div className="flex items-center justify-between">
               <span className="text-sm font-medium">Describe it</span>
-              {/* Hover for preview */}
               <div className="relative group">
-                <button
-                  type="button"
-                  className="text-xs px-2 py-1 rounded border bg-white hover:bg-gray-50"
-                >
+                <button type="button" className="text-xs px-2 py-1 rounded border bg-white hover:bg-gray-50">
                   Hover for preview
                 </button>
-                <div
-                  className="absolute right-0 mt-2 w-72 rounded border bg-white shadow-lg p-3 text-sm hidden group-hover:block"
-                >
+                <div className="absolute right-0 mt-2 w-80 rounded border bg-white shadow-lg p-3 text-sm hidden group-hover:block">
                   <p className="font-semibold mb-1">Preview</p>
-                  {merged.title || merged.start || merged.end ? (
+                  {(merged.title || merged.start || merged.end || merged.repeatDays) ? (
                     <ul className="space-y-1">
-                      {merged.title && (
-                        <li><span className="text-gray-500">Title:</span> {merged.title}</li>
-                      )}
-                      {merged.start && (
-                        <li><span className="text-gray-500">Start:</span> {merged.start}</li>
-                      )}
-                      {merged.end && (
-                        <li><span className="text-gray-500">End:</span> {merged.end}</li>
-                      )}
-                      {!merged.title && <li className="text-gray-500">Title: —</li>}
-                      {!merged.start && <li className="text-gray-500">Start: —</li>}
-                      {!merged.end && <li className="text-gray-500">End: —</li>}
+                      <li><span className="text-gray-500">Title:</span> {merged.title ?? "—"}</li>
+                      <li><span className="text-gray-500">Start:</span> {merged.start ?? "—"}</li>
+                      <li><span className="text-gray-500">End:</span> {merged.end ?? "—"}</li>
+                      <li>
+                        <span className="text-gray-500">Repeat:</span>{" "}
+                        {merged.repeatDays?.length ? merged.repeatDays.map(d => dayNames[d]).join(", ") : "—"}
+                        {merged.repeatUntil ? ` (until ${merged.repeatUntil})` : ""}
+                      </li>
                     </ul>
                   ) : (
                     <p className="text-gray-500">Nothing parsed yet.</p>
@@ -152,6 +135,7 @@ export default function NewEventModal({ open, onClose, onSubmit }: Props) {
               placeholder={`Examples:
 "Brunch with Alex Saturday 10–12"
 "CS lecture Mon/Wed 9:30-10:20, repeat until Dec 10"
+"Every weekday 7pm to 7:30"
 "Move Friday standup to 2pm"
 `}
               className="w-full border rounded px-3 py-2 resize-y"
@@ -162,13 +146,9 @@ export default function NewEventModal({ open, onClose, onSubmit }: Props) {
           </div>
         </div>
 
-        {/* Footer */}
         <div className="px-5 py-4 border-t flex justify-end gap-2">
           <button onClick={onClose} className="px-3 py-1">Cancel</button>
-          <button
-            onClick={() => onSubmit(merged)}
-            className="px-3 py-1 rounded bg-black text-white"
-          >
+          <button onClick={() => onSubmit(merged)} className="px-3 py-1 rounded bg-black text-white">
             Next
           </button>
         </div>
