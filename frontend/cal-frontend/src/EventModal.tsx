@@ -1,7 +1,8 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import type { AxiosError } from "axios";
 import type { EventOut, EventIn } from "./api";
 import { createEvent, updateEvent, deleteEvent } from "./api";
+import { isoToLocalInput, localInputToISO, nowLocalInput } from "./datetime";
 
 interface Props {
   initial?: EventOut | null;
@@ -11,30 +12,14 @@ interface Props {
 
 const WEEK = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"] as const;
 
-/** Parse ISO without zone (YYYY-MM-DDTHH:mm[:ss]) as LOCAL time. */
-function parseLocalIso(iso: string): Date {
-  const [d, t = "00:00:00"] = iso.split("T");
-  const [y, m, day] = d.split("-").map(n => parseInt(n, 10)); // numbers
-  const [hh, mm, ss = "0"] = t.split(":");                    // strings
-  return new Date(
-    y,
-    m - 1,
-    day,
-    parseInt(hh, 10),
-    parseInt(mm, 10),
-    parseInt(ss, 10)
-  );
-}
-const fmtTimeLocal = (iso: string) =>
-  parseLocalIso(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-
 export default function EventModal({ initial, onClose, onSaved }: Props) {
-  const isoNow = new Date().toISOString().slice(0, 16); // yyyy-mm-ddThh:mm
+  const isoNowLocal = nowLocalInput(); // yyyy-mm-ddThh:mm in local time
 
   const [form, setForm] = useState<EventIn>({
     title: initial?.title ?? "",
-    start: (initial?.start ?? isoNow).slice(0, 16),
-    end: (initial?.end ?? isoNow).slice(0, 16),
+    // convert any ISO coming from API (UTC Z) into local input values
+    start: initial?.start ? isoToLocalInput(initial.start) : isoNowLocal,
+    end:   initial?.end   ? isoToLocalInput(initial.end)   : isoNowLocal,
   });
 
   const [conflict, setConflict] = useState<null | {
@@ -56,55 +41,43 @@ export default function EventModal({ initial, onClose, onSaved }: Props) {
   });
   const [repeatUntil, setRepeatUntil] = useState<string>(""); // yyyy-mm-dd
 
-  // Prefill repeat from initial (if parser provided)
-  useEffect(() => {
-    const days: number[] | undefined = (initial as any)?.repeatDays;
-    const until: string | undefined = (initial as any)?.repeatUntil;
-    if ((days && days.length) || until) {
-      const next = { ...repeatDays };
-      days?.forEach(d => { next[d] = true; });
-      setRepeatDays(next);
-      if (until) setRepeatUntil(until);
-      setRepeatOpen(true);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
   const toggleDay = (d: number) =>
     setRepeatDays({ ...repeatDays, [d]: !repeatDays[d] });
 
   const anyRepeat = Object.values(repeatDays).some(Boolean) && !!repeatUntil;
 
-  // Helpers
-  const isoWithSeconds = (s: string) =>
-    s.length === 16 ? s + ":00" : s;
+  // normalize local input to ISO (UTC Z)
+  const asUTC = (s: string) => localInputToISO(s);
 
-  const sameTimeOnDate = (baseStartIso: string, baseEndIso: string, ymd: string) => {
-    const [datePart] = baseStartIso.split("T");
-    const startTime = baseStartIso.slice(datePart.length + 1);
-    const endDuration =
-      new Date(isoWithSeconds(baseEndIso)).getTime() -
-      new Date(isoWithSeconds(baseStartIso)).getTime();
-
-    const startIso = `${ymd}T${startTime}`;
-    const endIso = new Date(new Date(startIso).getTime() + endDuration)
-      .toISOString()
-      .slice(0, 19);
-    return { startIso: startIso.slice(0, 19), endIso };
+  const sameTimeOnDate = (baseStartLocal: string, baseEndLocal: string, ymd: string) => {
+    // take the hh:mm from baseStartLocal, baseEndLocal and apply to date ymd (local), then convert to UTC ISO
+    const startTime = baseStartLocal.split("T")[1]; // hh:mm
+    const endTime   = baseEndLocal.split("T")[1];
+    const startISO  = localInputToISO(`${ymd}T${startTime}`);
+    const endISO    = localInputToISO(`${ymd}T${endTime}`);
+    return { startISO, endISO };
   };
 
   const enumerateRepeats = (): EventIn[] => {
-    const start0 = new Date(isoWithSeconds(form.start));
-    const until = new Date(repeatUntil + "T23:59:59");
+    const start0 = new Date(asUTC(form.start)); // UTC date for the first entry
+    const until  = repeatUntil ? new Date(`${repeatUntil}T23:59:59`) : null;
     const out: EventIn[] = [];
+    if (!until) return out;
 
-    for (let d = new Date(start0); d <= until; d.setDate(d.getDate() + 1)) {
-      const dow = d.getDay();
-      if (!repeatDays[dow]) continue;
-
-      const ymd = d.toISOString().slice(0, 10);
-      const { startIso, endIso } = sameTimeOnDate(form.start, form.end, ymd);
-      out.push({ title: form.title, start: startIso, end: endIso });
+    const d = new Date(start0); // walk day by day in local terms
+    // Walk by local midnights:
+    for (;;) {
+      const local = new Date(
+        d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), 12, 0, 0
+      ); // force local date using noon trick (avoids DST edge)
+      if (local > until) break;
+      const dow = local.getDay();
+      if (repeatDays[dow]) {
+        const ymd = `${local.getFullYear()}-${String(local.getMonth()+1).padStart(2,"0")}-${String(local.getDate()).padStart(2,"0")}`;
+        const { startISO, endISO } = sameTimeOnDate(form.start, form.end, ymd);
+        out.push({ title: form.title, start: startISO, end: endISO });
+      }
+      d.setUTCDate(d.getUTCDate() + 1);
     }
     return out;
   };
@@ -112,8 +85,8 @@ export default function EventModal({ initial, onClose, onSaved }: Props) {
   const handleSave = async () => {
     const payload: EventIn = {
       ...form,
-      start: isoWithSeconds(form.start),
-      end: isoWithSeconds(form.end),
+      start: asUTC(form.start),
+      end:   asUTC(form.end),
     };
 
     try {
@@ -175,7 +148,11 @@ export default function EventModal({ initial, onClose, onSaved }: Props) {
           <div className="bg-red-100 text-red-800 p-2 rounded text-sm">
             <p className="font-semibold">⛔ Time conflict</p>
             <p>{conflict.title}</p>
-            <p>{fmtTimeLocal(conflict.start)} – {fmtTimeLocal(conflict.end)}</p>
+            <p>
+              {new Date(conflict.start).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}{" "}
+              –{" "}
+              {new Date(conflict.end).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+            </p>
           </div>
         )}
 
@@ -239,7 +216,7 @@ export default function EventModal({ initial, onClose, onSaved }: Props) {
                     <label key={lbl} className="text-sm inline-flex items-center gap-1">
                       <input
                         type="checkbox"
-                        checked={!!repeatDays[i]}
+                        checked={!!(repeatDays as any)[i]}
                         onChange={() => toggleDay(i)}
                       />
                       {lbl}

@@ -1,32 +1,26 @@
 # app/main.py
-
-from datetime import datetime, date, timedelta
-from typing import List, Optional
+from datetime import datetime, timedelta
+from typing import Optional
 
 from fastapi import FastAPI, Depends, HTTPException, status, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from sqlalchemy import select, and_
-from sqlalchemy.exc import IntegrityError
-
-import uuid
-import tempfile, re
 from pathlib import Path
+import uuid, tempfile, re
 from dateutil import parser as dtparse
 import pytesseract
 from PIL import Image
 
-# ── local modules ─────────────────────────────────────────────
 from .db import Base, engine, get_db
 from .models import Event
 from .schemas import EventIn, EventOut
-# ─────────────────────────────────────────────────────────────
 
 app = FastAPI(title="Cal API")
 
-# ──────────────────────────────── OCR helpers ────────────────────────────────
-
+# ───────────────── OCR helpers ─────────────────
 def ocr_to_text(data: bytes) -> str:
     with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp:
         tmp.write(data)
@@ -36,60 +30,53 @@ def ocr_to_text(data: bytes) -> str:
     finally:
         Path(tmp.name).unlink(missing_ok=True)
 
-UPLOAD_DIR = Path(__file__).resolve().parents[1] / "uploads"
-UPLOAD_DIR.mkdir(exist_ok=True)
-app.mount("/uploads", StaticFiles(directory=UPLOAD_DIR), name="uploads")
-
 _date_re = re.compile(
     r"\b(\d{4}[-/]\d{1,2}[-/]\d{1,2}|\d{1,2}[-/]\d{1,2}[-/]\d{2,4}|\w+\s+\d{1,2},\s*\d{4})\b",
     re.IGNORECASE,
 )
-_time_range_re = re.compile(
-    r"(\d{1,2}(?::\d{2})?\s*(?:am|pm)?)\s*(?:-|–|—|to)\s*(\d{1,2}(?::\d{2})?\s*(?:am|pm)?)",
-    re.IGNORECASE,
+_time_re = re.compile(
+    r"(\d{1,2}(:\d{2})?\s*(?:AM|PM|am|pm)?)\s*(?:-|–|—|to)\s*(\d{1,2}(:\d{2})?\s*(?:AM|PM|am|pm)?)"
 )
 
-def extract_event_fields(text: str) -> dict[str, str] | None:
-    """Very simple extractor used for /uploads OCR results."""
+def extract_event_fields(text: str) -> Optional[dict]:
     date_m = _date_re.search(text)
-    time_m = _time_range_re.search(text)
+    time_m = _time_re.search(text)
     if not (date_m and time_m):
         return None
 
     date_iso = dtparse.parse(date_m.group(1)).date().isoformat()
-    start_iso = dtparse.parse(f"{date_iso} {time_m.group(1)}").isoformat(timespec="seconds")
-    end_iso   = dtparse.parse(f"{date_iso} {time_m.group(2)}").isoformat(timespec="seconds")
 
-    # Title → first non-empty line that isn’t the date/time line
+    # Treat parsed times as local, then keep timezone info in ISO
+    start_local = dtparse.parse(f"{date_iso} {time_m.group(1)}")
+    end_local   = dtparse.parse(f"{date_iso} {time_m.group(3)}")
+
+    start_iso = start_local.astimezone().isoformat()
+    end_iso   = end_local.astimezone().isoformat()
+
+    # Title guess
     lines = [ln.strip() for ln in text.splitlines() if ln.strip()]
-    title = "Untitled"
-    if lines:
-        try:
-            date_idx = next(i for i, l in enumerate(lines) if _date_re.search(l))
-            # heuristic: date line, (maybe) time line, then title-ish
-            if date_idx + 2 < len(lines):
-                title = lines[date_idx + 2][:200]
-            else:
-                title = lines[0][:200]
-        except StopIteration:
-            title = lines[0][:200]
+    try:
+        date_idx = next(i for i, l in enumerate(lines) if _date_re.search(l))
+        title = lines[date_idx + 2]
+    except Exception:
+        title = lines[0] if lines else "Untitled"
+    title = title[:200]
 
     return {"title": title, "start": start_iso, "end": end_iso}
+
+UPLOAD_DIR = Path(__file__).resolve().parents[1] / "uploads"
+UPLOAD_DIR.mkdir(exist_ok=True)
+app.mount("/uploads", StaticFiles(directory=UPLOAD_DIR), name="uploads")
 
 @app.post("/uploads", status_code=201)
 async def upload_file(file: UploadFile = File(...)):
     raw = await file.read()
-
-    # save original
     ext = (Path(file.filename).suffix or ".png").lower()
     filename = f"{uuid.uuid4().hex}{ext}"
-    dest = UPLOAD_DIR / filename
-    dest.write_bytes(raw)
+    (UPLOAD_DIR / filename).write_bytes(raw)
 
     text = ocr_to_text(raw)
-    print("──── OCR TEXT ────")
-    print(text)
-    print("──────────────────")
+    print("──── OCR TEXT ────"); print(text); print("──────────────────")
 
     extracted = extract_event_fields(text)
     if not extracted:
@@ -98,209 +85,7 @@ async def upload_file(file: UploadFile = File(...)):
     extracted["thumb"] = f"/uploads/{filename}"
     return extracted
 
-# ────────────────────────────── Prompt parser ────────────────────────────────
-# No external libs beyond dateutil & regex; supports:
-#  - dates: explicit (Aug 9, 8/9, 2025-08-09), “today”, “tomorrow”
-#  - days: mon/tue/wed/thu/fri/sat/sun, “weekday(s)”, “weekend(s)”
-#  - ranges: "10-11", "10am-11:15", "from 3pm to 4", "7:30 to 8"
-#  - repetition: “every mon/wed”, “mwf”, “until Dec 10”
-#  - title: leftover words after removing date/time keywords
-
-DAYS = {
-    "sun": 0, "sunday": 0,
-    "mon": 1, "monday": 1,
-    "tue": 2, "tues": 2, "tuesday": 2,
-    "wed": 3, "wednesday": 3,
-    "thu": 4, "thur": 4, "thurs": 4, "thursday": 4,
-    "fri": 5, "friday": 5,
-    "sat": 6, "saturday": 6,
-}
-WEEKDAY_SET = {1,2,3,4,5}
-WEEKEND_SET = {0,6}
-
-one_time_re   = re.compile(r"\b(?:at\s+)?(\d{1,2}(?::\d{2})?\s*(?:am|pm)?)\b", re.IGNORECASE)
-range_re      = _time_range_re
-from_to_re    = re.compile(r"\bfrom\s+(\d{1,2}(?::\d{2})?\s*(?:am|pm)?)\s+to\s+(\d{1,2}(?::\d{2})?\s*(?:am|pm)?)\b", re.IGNORECASE)
-date_word_re  = re.compile(r"\b(today|tomorrow)\b", re.IGNORECASE)
-explicit_date = _date_re
-every_re      = re.compile(r"\b(?:every|each)\b", re.IGNORECASE)
-until_re      = re.compile(r"\b(?:until|till|through)\s+(.+)$", re.IGNORECASE)
-
-def _next_weekday(dow: int, base: date) -> date:
-    delta = (dow - base.weekday()) % 7
-    return base + timedelta(days=delta)
-
-def _parse_times(txt: str) -> tuple[Optional[str], Optional[str], str]:
-    # 1) range "10-11", "10am-11:15"
-    m = range_re.search(txt) or from_to_re.search(txt)
-    if m:
-        s, e = m.group(1), m.group(2)
-        cleaned = txt[:m.start()] + txt[m.end():]
-        return s, e, cleaned
-
-    # 2) single time "at 7pm" → +1 hour default
-    m = one_time_re.search(txt)
-    if m:
-        t = m.group(1)
-        cleaned = txt[:m.start()] + txt[m.end():]
-        return t, None, cleaned
-
-    return None, None, txt
-
-def _parse_days(txt: str) -> tuple[set[int], str]:
-    dows: set[int] = set()
-    cleaned = txt
-
-    # weekdays / weekends
-    for key, group in [("weekdays", WEEKDAY_SET), ("weekday", WEEKDAY_SET),
-                       ("weekends", WEEKEND_SET), ("weekend", WEEKEND_SET)]:
-        i = cleaned.lower().find(key)
-        if i != -1:
-            dows |= set(group)
-            cleaned = cleaned[:i] + cleaned[i+len(key):]
-
-    # words or comma/slash separated lists (mon, wed) (mon/wed)
-    tokens = re.findall(r"\b([a-z]{2,9})\b", cleaned.lower())
-    for tk in tokens:
-        if tk in DAYS:
-            dows.add(DAYS[tk])
-
-    # compact forms like "mwf", "tth"
-    for chunk in re.findall(r"\b([mtwhfsu]{2,7})\b", cleaned.lower()):
-        # greedily map letter groups
-        repl = chunk
-        mapping = {
-            "m":1,"t":2,"w":3,"th":4,"r":4,"f":5,"s":6,"su":0,"u":0
-        }
-        i=0
-        while i < len(chunk):
-            if chunk[i:i+2] in ("th","su"):
-                dows.add(mapping[chunk[i:i+2]])
-                i += 2
-            else:
-                c = chunk[i]
-                if c in mapping:
-                    dows.add(mapping[c])
-                i += 1
-        cleaned = cleaned.replace(chunk, "")
-
-    # also remove explicit day words we matched
-    for name in sorted(DAYS.keys(), key=len, reverse=True):
-        cleaned = re.sub(rf"\b{name}\b", "", cleaned, flags=re.IGNORECASE)
-
-    # remove words "every"/"each"
-    cleaned = every_re.sub("", cleaned)
-
-    return dows, cleaned
-
-def _parse_date(txt: str, base_day: Optional[int]) -> tuple[date, str]:
-    today = date.today()
-
-    # explicit "today/tomorrow"
-    m = date_word_re.search(txt)
-    if m:
-        word = m.group(1).lower()
-        cleaned = txt[:m.start()] + txt[m.end():]
-        return (today if word == "today" else today + timedelta(days=1)), cleaned
-
-    # explicit date like Aug 9 / 8-9 / 2025-08-09
-    m = explicit_date.search(txt)
-    if m:
-        d = dtparse.parse(m.group(1)).date()
-        cleaned = txt[:m.start()] + txt[m.end():]
-        return d, cleaned
-
-    # use next occurrence of parsed weekday if present
-    if base_day is not None:
-        return _next_weekday(base_day, today), txt
-
-    # fallback: today
-    return today, txt
-
-def _parse_until(txt: str) -> tuple[Optional[date], str]:
-    m = until_re.search(txt)
-    if not m:
-        return None, txt
-    try:
-        d = dtparse.parse(m.group(1)).date()
-        cleaned = txt[:m.start()] + txt[m.end():]
-        return d, cleaned
-    except Exception:
-        return None, txt
-
-def _strip_extraneous(txt: str) -> str:
-    # very light cleanup after yanking tokens out
-    txt = re.sub(r"\s{2,}", " ", txt)
-    txt = re.sub(r"\b(?:at|on|from|to|the|a|an|and|of)\b", " ", txt, flags=re.IGNORECASE)
-    return " ".join(txt.split()).strip(" ,.-")
-
-@app.post("/parse")
-def parse_prompt(payload: dict):
-    """
-    Input:  { "prompt": "CS 124 Mon/Wed 9:30-10:20 until Dec 10" }
-    Output: {
-      "title": "CS 124",
-      "start": "2025-08-06T09:30:00",
-      "end": "2025-08-06T10:20:00",
-      "repeatDays": [1,3],
-      "repeatUntil": "2025-12-10"
-    }
-    All times are LOCAL (naive) to match the current app behavior.
-    """
-    prompt = (payload.get("prompt") or "").strip()
-    if not prompt:
-        return {}
-
-    txt = " " + prompt + " "  # padding for regex slicing simplicity
-
-    # repetition “until …”
-    repeat_until, txt = _parse_until(txt)
-
-    # days of week / groups
-    dows, txt = _parse_days(txt)
-
-    # time(s)
-    t1, t2, txt = _parse_times(txt)
-
-    # date (if any) — if repeating days were given, use the first of those for the initial date
-    first_dow = min(dows) if dows else None
-    the_date, txt = _parse_date(txt, first_dow)
-
-    # Build start/end (LOCAL) — if only single time was given, make it a 60-min block
-    def _resolve(when: date, t: str) -> datetime:
-        return dtparse.parse(f"{when.isoformat()} {t}")
-
-    start_dt = None
-    end_dt   = None
-    if t1 and t2:
-        start_dt = _resolve(the_date, t1)
-        end_dt   = _resolve(the_date, t2)
-        # if user writes "10-9" by mistake, swap
-        if end_dt <= start_dt:
-            end_dt = start_dt + timedelta(hours=1)
-    elif t1:
-        start_dt = _resolve(the_date, t1)
-        end_dt   = start_dt + timedelta(hours=1)
-
-    # Title is the leftover text
-    title = _strip_extraneous(txt)
-    if not title:
-        # fallback: use first 3 words of the original prompt
-        title = " ".join(prompt.split()[:3]) or "Untitled"
-
-    out = {"title": title}
-    if start_dt and end_dt:
-        out["start"] = start_dt.isoformat(timespec="seconds")
-        out["end"]   = end_dt.isoformat(timespec="seconds")
-    if dows:
-        out["repeatDays"] = sorted(list(dows))
-    if repeat_until:
-        out["repeatUntil"] = repeat_until.isoformat()
-
-    return out
-
-# ─────────────────────────────── CORS & startup ──────────────────────────────
-
+# ───────────────── CORS / startup ─────────────────
 from os import getenv
 origins = [getenv("FRONTEND_ORIGIN", "http://localhost:5173")]
 codespaces_origin = getenv("CODESPACES_FRONTEND")
@@ -309,7 +94,7 @@ if codespaces_origin:
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],   # dev-only; tighten later
+    allow_origins=["*"],  # dev-only; lock down later
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -326,8 +111,7 @@ def health_check():
 def read_root():
     return {"message": "FastAPI backend is running."}
 
-# ─────────────────────────────── events CRUD ────────────────────────────────
-
+# ───────────────── Events CRUD ─────────────────
 @app.get("/events", response_model=list[EventOut])
 def list_events(db: Session = Depends(get_db)):
     return db.scalars(select(Event)).all()
@@ -336,23 +120,21 @@ def list_events(db: Session = Depends(get_db)):
 def create_event(data: EventIn, db: Session = Depends(get_db)):
     payload = data.model_dump()
 
-    overlap_stmt = select(Event).where(
+    overlap = select(Event).where(
         and_(Event.start < payload["end"], Event.end > payload["start"])
     )
-    conflict = db.scalars(overlap_stmt).first()
+    conflict = db.scalars(overlap).first()
     if conflict:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail={
                 "message": "Time overlaps with another event.",
-                "conflicts": [
-                    {
-                        "id": conflict.id,
-                        "title": conflict.title,
-                        "start": conflict.start.isoformat(),
-                        "end": conflict.end.isoformat(),
-                    }
-                ],
+                "conflicts": [{
+                    "id": conflict.id,
+                    "title": conflict.title,
+                    "start": conflict.start.isoformat(),
+                    "end": conflict.end.isoformat(),
+                }],
             },
         )
 
@@ -364,23 +146,21 @@ def create_event(data: EventIn, db: Session = Depends(get_db)):
 
 @app.put("/events/{event_id}", response_model=EventOut)
 def update_event(event_id: int, payload: EventIn, db: Session = Depends(get_db)):
-    overlap_stmt = select(Event).where(
+    overlap = select(Event).where(
         and_(Event.id != event_id, Event.start < payload.end, Event.end > payload.start)
     )
-    conflict = db.scalars(overlap_stmt).first()
+    conflict = db.scalars(overlap).first()
     if conflict:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail={
                 "message": "Time overlaps with another event.",
-                "conflicts": [
-                    {
-                        "id": conflict.id,
-                        "title": conflict.title,
-                        "start": conflict.start.isoformat(),
-                        "end": conflict.end.isoformat(),
-                    }
-                ],
+                "conflicts": [{
+                    "id": conflict.id,
+                    "title": conflict.title,
+                    "start": conflict.start.isoformat(),
+                    "end": conflict.end.isoformat(),
+                }],
             },
         )
 
@@ -403,6 +183,87 @@ def delete_event(event_id: int, db: Session = Depends(get_db)):
     db.delete(event)
     db.commit()
 
+# ───────────────── NEW: Natural language /parse ─────────────────
+class ParseIn(BaseModel):
+    prompt: str
+
+class ParsedOut(BaseModel):
+    title: Optional[str] = None
+    start: Optional[str] = None  # ISO with timezone
+    end:   Optional[str] = None
+
+_time_range = re.compile(
+    r"(?P<t1>\d{1,2}(?::\d{2})?\s*(?:am|pm)?)\s*(?:-|–|—|to)\s*(?P<t2>\d{1,2}(?::\d{2})?\s*(?:am|pm)?)",
+    re.I,
+)
+_until = re.compile(r"\b(?:until|thru|through|till|til)\s+(?P<date>.+)$", re.I)
+_every_weekday = re.compile(r"\bevery\s+weekday\b", re.I)
+
+def _next_weekday(base: datetime, target: int) -> datetime:
+    delta = (target - base.weekday() + 7) % 7
+    if delta == 0:
+        delta = 7
+    return base + timedelta(days=delta)
+
+@app.post("/parse", response_model=ParsedOut)
+def parse_prompt(data: ParseIn) -> ParsedOut:
+    text = data.prompt.strip()
+    if not text:
+        return ParsedOut()
+
+    base = datetime.now().astimezone()
+
+    # time range
+    tmatch = _time_range.search(text)
+    t1 = t2 = None
+    if tmatch:
+        t1 = tmatch.group("t1")
+        t2 = tmatch.group("t2")
+
+    # try dateutil parse first (handles “next tue”, “tomorrow”, etc.)
+    chosen_date: Optional[datetime] = None
+    try:
+        dt = dtparse.parse(text, default=base)
+        if dt:
+            chosen_date = dt if dt.tzinfo else dt.replace(tzinfo=base.tzinfo)
+    except Exception:
+        pass
+
+    # fallback: every weekday → next business day
+    if not chosen_date and _every_weekday.search(text):
+        for add in range(1, 8):
+            cand = base + timedelta(days=add)
+            if cand.weekday() < 5:
+                chosen_date = cand
+                break
+
+    if not chosen_date:
+        chosen_date = base
+
+    if t1 and t2:
+        start_local = dtparse.parse(f"{chosen_date.date()} {t1}", default=chosen_date)
+        end_local   = dtparse.parse(f"{chosen_date.date()} {t2}", default=chosen_date)
+    else:
+        start_local = chosen_date.replace(hour=10, minute=0, second=0, microsecond=0)
+        end_local   = start_local + timedelta(hours=1)
+
+    if end_local <= start_local:
+        end_local = start_local + timedelta(hours=1)
+
+    # title guess
+    title = text
+    if tmatch:
+        title = title.replace(tmatch.group(0), "").strip()
+    u = _until.search(title)
+    if u:
+        title = title.replace(u.group(0), "").strip()
+    title = re.sub(r"^(on|at|this|next)\s+", "", title, flags=re.I)
+
+    return ParsedOut(
+        title=title or None,
+        start=start_local.astimezone().isoformat(),
+        end=end_local.astimezone().isoformat(),
+    )
 '''
 | Concept                    | What It Does                                                                                                        |
 | -------------------------- | ------------------------------------------------------------------------------------------------------------------- |
