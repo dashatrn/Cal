@@ -1,0 +1,32 @@
+# render.yaml
+databases:
+  - name: cal-db
+    plan: free
+
+services:
+  - type: web
+    name: cal-api
+    env: docker
+    dockerfilePath: backend/Dockerfile
+    autoDeploy: true
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: cal-db
+          property: connectionString
+      # Allow your hosted frontend origin (fill in after frontend deploy)
+      - key: FRONTEND_ORIGIN
+        value: https://REPLACE_WITH_FRONTEND_DOMAIN
+
+  - type: web
+    name: cal-frontend
+    env: static
+    buildCommand: |
+      cd frontend/cal-frontend
+      npm ci
+      npm run build
+    staticPublishPath: frontend/cal-frontend/dist
+    envVars:
+      # Point the built frontend at your backend API
+      - key: VITE_API_URL
+        value: https://REPLACE_WITH_BACKEND_DOMAIN

@@ -31,7 +31,7 @@ export type ParsedFields = Partial<EventIn> & {
   repeatUntil?: string;     // YYYY-MM-DD (local)
 };
 
-// Use fetch for multipart so we don’t fight axios JSON headers
+// multipart upload
 export async function uploadImageForParse(file: File): Promise<ParsedFields> {
   const body = new FormData();
   body.append("file", file);
@@ -46,3 +46,7 @@ export const parsePrompt = (prompt: string, tz?: string) =>
     tz: tz || Intl.DateTimeFormat().resolvedOptions().timeZone,
   }).then(r => r.data);
 
+// NEW: ask backend for next free suggestion
+export const suggestNext = (startIso: string, endIso: string) =>
+  api.get<{ start: string; end: string }>("/suggest", { params: { start: startIso, end: endIso } })
+     .then(r => r.data);

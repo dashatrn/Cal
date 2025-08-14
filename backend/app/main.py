@@ -1,5 +1,4 @@
 # app/main.py
-
 from datetime import datetime, date, timedelta
 from typing import Optional
 
@@ -8,7 +7,6 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy.orm import Session
 from sqlalchemy import select, and_
-from sqlalchemy.exc import IntegrityError
 
 from pathlib import Path
 import uuid
@@ -16,6 +14,7 @@ import tempfile
 import re
 
 from dateutil import parser as dtparse          # pip install python-dateutil
+from dateutil.parser import isoparse as iso_parse
 import pytesseract                              # pip install pytesseract pillow
 from PIL import Image                           # pip install pillow
 from zoneinfo import ZoneInfo                   # py3.9+
@@ -63,9 +62,6 @@ def ocr_to_text(data: bytes) -> str:
             pass
 
 # ───────────────────────── Helpers: prompt parsing ──────────────────
-# ───────────────────────── Helpers: prompt parsing ──────────────────
-from typing import Optional
-
 # day name → 0..6
 DOW_MAP = {
     "sunday": 0, "sun": 0,
@@ -194,8 +190,6 @@ def scrub_title(text: str) -> str:
     t = re.sub(r"\s{2,}", " ", t).strip(" ,.-\n\t")
     return (t or "Untitled").strip()
 
-
-    
 def build_iso(dt_local: datetime, tz: ZoneInfo) -> str:
     # attach tz and convert to UTC Z
     dt_local = dt_local.replace(tzinfo=tz)
@@ -298,12 +292,9 @@ async def parse_prompt(payload: dict):
     until_d = parse_until_date(prompt, tz)
 
     # 4) base date:
-    #    - if user referenced a specific date anywhere, prefer it
-    #    - else today (local)
-    # 4) base date …
     explicit_date = None
     try:
-        if DATE_TOKEN_RE.search(prompt):               # <— use our guarded test
+        if DATE_TOKEN_RE.search(prompt):
             dt = dtparse.parse(prompt, fuzzy=True, default=datetime.now(tz))
             explicit_date = dt.date()
     except Exception:
@@ -336,6 +327,36 @@ async def parse_prompt(payload: dict):
 
     return out
 
+# ───────────────────────── Suggest next free slot ───────────────────
+@app.get("/suggest")
+def suggest_next_free(start: str, end: str, db: Session = Depends(get_db)):
+    """
+    Query params: start, end (ISO strings, usually UTC 'Z')
+    Returns: {"start": ISO, "end": ISO} with the next non-overlapping window.
+    """
+    try:
+        s = iso_parse(start)
+        e = iso_parse(end)
+    except Exception:
+        raise HTTPException(status_code=422, detail="Invalid ISO datetimes")
+
+    if e <= s:
+        e = s + timedelta(hours=1)
+
+    duration = e - s
+
+    while True:
+        conflict = db.scalars(
+            select(Event).where(and_(Event.start < s + duration, Event.end > s))
+        ).first()
+        if not conflict:
+            return {
+                "start": s.isoformat().replace("+00:00", "Z"),
+                "end": (s + duration).isoformat().replace("+00:00", "Z"),
+            }
+        # Move start to the end of the conflicting event
+        s = max(s, conflict.end)
+
 # ───────────────────────── Events CRUD ──────────────────────────────
 
 @app.get("/events", response_model=list[EventOut])
@@ -346,7 +367,6 @@ def list_events(db: Session = Depends(get_db)):
 def create_event(data: EventIn, db: Session = Depends(get_db)):
     payload = data.model_dump()
 
-    # conflict check (overlap)
     overlap_stmt = select(Event).where(
         and_(Event.start < payload["end"], Event.end > payload["start"])
     )
@@ -356,14 +376,12 @@ def create_event(data: EventIn, db: Session = Depends(get_db)):
             status_code=status.HTTP_409_CONFLICT,
             detail={
                 "message": "Time overlaps with another event.",
-                "conflicts": [
-                    {
-                        "id": conflict.id,
-                        "title": conflict.title,
-                        "start": conflict.start.isoformat(),
-                        "end": conflict.end.isoformat(),
-                    }
-                ],
+                "conflicts": [{
+                    "id": conflict.id,
+                    "title": conflict.title,
+                    "start": conflict.start.isoformat(),
+                    "end": conflict.end.isoformat(),
+                }],
             },
         )
 
@@ -384,14 +402,12 @@ def update_event(event_id: int, payload: EventIn, db: Session = Depends(get_db))
             status_code=status.HTTP_409_CONFLICT,
             detail={
                 "message": "Time overlaps with another event.",
-                "conflicts": [
-                    {
-                        "id": conflict.id,
-                        "title": conflict.title,
-                        "start": conflict.start.isoformat(),
-                        "end": conflict.end.isoformat(),
-                    }
-                ],
+                "conflicts": [{
+                    "id": conflict.id,
+                    "title": conflict.title,
+                    "start": conflict.start.isoformat(),
+                    "end": conflict.end.isoformat(),
+                }],
             },
         )
 

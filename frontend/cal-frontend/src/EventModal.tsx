@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import type { AxiosError } from "axios";
 import type { EventOut, EventIn } from "./api";
-import { createEvent, updateEvent, deleteEvent } from "./api";
+import { createEvent, updateEvent, deleteEvent, suggestNext } from "./api";
 import { isoToLocalInput, localInputToISO, nowLocalInput } from "./datetime";
 
 interface Props {
@@ -36,7 +36,6 @@ export default function EventModal({ initial, onClose, onSaved }: Props) {
       setForm({ ...form, [k]: e.target.value });
 
   // —— Repeat (v1) ————————————————————————————————————————————————
-  // pull optional pre-parsed values (when coming from NewEventModal)
   const providedDays   = (initial as any)?.repeatDays as number[] | undefined;
   const providedUntil  = (initial as any)?.repeatUntil as string | undefined;
 
@@ -46,7 +45,6 @@ export default function EventModal({ initial, onClose, onSaved }: Props) {
   });
   const [repeatUntil, setRepeatUntil] = useState<string>(""); // yyyy-mm-dd
 
-  // apply provided repeat values once on mount
   useEffect(() => {
     if ((providedDays && providedDays.length) || providedUntil) {
       setRepeatOpen(true);
@@ -67,10 +65,8 @@ export default function EventModal({ initial, onClose, onSaved }: Props) {
 
   const anyRepeat = Object.values(repeatDays).some(Boolean) && !!repeatUntil;
 
-  // normalize local input → ISO(UTC) that backend expects
   const asUTC = (s: string) => localInputToISO(s);
 
-  // preserve the same local hh:mm but move to a different date (ymd), then ISO(UTC)
   const sameTimeOnDate = (baseStartLocal: string, baseEndLocal: string, ymd: string) => {
     const startTime = baseStartLocal.split("T")[1]; // hh:mm
     const endTime   = baseEndLocal.split("T")[1];
@@ -86,7 +82,6 @@ export default function EventModal({ initial, onClose, onSaved }: Props) {
     if (!until) return out;
 
     const d = new Date(start0UTC);
-    // walk by days using UTC date math, then convert to local calendar-day via "noon trick"
     for (;;) {
       const localNoon = new Date(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), 12, 0, 0);
       if (localNoon > until) break;
@@ -105,7 +100,22 @@ export default function EventModal({ initial, onClose, onSaved }: Props) {
     }
     return out;
   };
-  // ————————————————————————————————————————————————————————————————
+
+  // NEW: accept server suggestion for next free time when conflict happens
+  const useSuggestion = async () => {
+    try {
+      const s = await suggestNext(asUTC(form.start), asUTC(form.end));
+      setForm({
+        ...form,
+        start: isoToLocalInput(s.start),
+        end:   isoToLocalInput(s.end),
+      });
+      setConflict(null);
+    } catch (e) {
+      console.error(e);
+      alert("Could not fetch a suggestion.");
+    }
+  };
 
   const handleSave = async () => {
     const payload: EventIn = {
@@ -178,6 +188,13 @@ export default function EventModal({ initial, onClose, onSaved }: Props) {
               –{" "}
               {new Date(conflict.end).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
             </p>
+            <button
+              type="button"
+              onClick={useSuggestion}
+              className="mt-2 text-xs underline"
+            >
+              Use next free time
+            </button>
           </div>
         )}
 
