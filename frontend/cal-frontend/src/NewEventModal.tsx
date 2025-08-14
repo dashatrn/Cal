@@ -61,18 +61,19 @@ export default function NewEventModal({ open, onClose, onSubmit }: Props) {
   };
 
   // Merge: text overrides image
-  const merged: PartialEvent = useMemo(() => {
-    const img = fromImage ?? {};
-    const txt = fromText ?? {};
-    return {
-      thumb: img.thumb ?? undefined,
-      title: txt.title || img.title,
-      start: txt.start || img.start,
-      end:   txt.end   || img.end,
-      repeatDays:  txt.repeatDays  || img.repeatDays,
-      repeatUntil: txt.repeatUntil || img.repeatUntil,
-    };
-  }, [fromImage, fromText]);
+const merged: PartialEvent = useMemo(() => {
+  const img = fromImage ?? {};
+  const txt = fromText ?? {};
+  return {
+    thumb: img.thumb ?? undefined,
+    title: txt.title || img.title,
+    start: txt.start || img.start,
+    end:   txt.end   || img.end,
+    repeatDays:      txt.repeatDays      || img.repeatDays,
+    repeatUntil:     txt.repeatUntil     || img.repeatUntil,
+    repeatEveryWeeks:txt.repeatEveryWeeks|| img.repeatEveryWeeks, // ← NEW
+  };
+}, [fromImage, fromText]);
 
   if (!open) return null;
 
@@ -147,6 +148,10 @@ export default function NewEventModal({ open, onClose, onSubmit }: Props) {
                         <span className="text-gray-500">Repeat:</span>{" "}
                         {merged.repeatDays?.length ? merged.repeatDays.map(d => dayNames[d]).join(", ") : "—"}
                         {merged.repeatUntil ? ` (until ${merged.repeatUntil})` : ""}
+                      </li>
+                      <li>
+                        <span className="text-gray-500">Every N weeks:</span>{" "}
+                        {merged.repeatEveryWeeks ?? "—"}
                       </li>
                     </ul>
                   ) : (

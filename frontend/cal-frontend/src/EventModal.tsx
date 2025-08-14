@@ -22,11 +22,10 @@ export default function EventModal({ initial, onClose, onSaved }: Props) {
     end:   initial?.end   ? isoToLocalInput(initial.end)   : isoNowLocal,
   });
 
-  const [conflict, setConflict] = useState<null | {
-    title: string;
-    start: string;
-    end: string;
-  }>(null);
+  const [conflict, setConflict] = useState<null | { title: string; start: string; end: string }>(null);
+
+  // NEW: suggested next free slot (UTC ISO from backend)
+  const [suggested, setSuggested] = useState<null | { start: string; end: string }>(null);
 
   const isEdit = typeof initial?.id === "number" && initial.id !== 0;
 
@@ -36,8 +35,10 @@ export default function EventModal({ initial, onClose, onSaved }: Props) {
       setForm({ ...form, [k]: e.target.value });
 
   // —— Repeat (v1) ————————————————————————————————————————————————
+  // pull optional pre-parsed values (when coming from NewEventModal)
   const providedDays   = (initial as any)?.repeatDays as number[] | undefined;
   const providedUntil  = (initial as any)?.repeatUntil as string | undefined;
+  const providedEvery  = (initial as any)?.repeatEveryWeeks as number | undefined;
 
   const [repeatOpen, setRepeatOpen] = useState<boolean>(false);
   const [repeatDays, setRepeatDays] = useState<Record<number, boolean>>({
@@ -65,8 +66,10 @@ export default function EventModal({ initial, onClose, onSaved }: Props) {
 
   const anyRepeat = Object.values(repeatDays).some(Boolean) && !!repeatUntil;
 
+  // normalize local input → ISO(UTC) that backend expects
   const asUTC = (s: string) => localInputToISO(s);
 
+  // preserve the same local hh:mm but move to a different date (ymd), then ISO(UTC)
   const sameTimeOnDate = (baseStartLocal: string, baseEndLocal: string, ymd: string) => {
     const startTime = baseStartLocal.split("T")[1]; // hh:mm
     const endTime   = baseEndLocal.split("T")[1];
@@ -81,6 +84,10 @@ export default function EventModal({ initial, onClose, onSaved }: Props) {
     const out: EventIn[] = [];
     if (!until) return out;
 
+    const firstLocalNoon = new Date(
+      start0UTC.getUTCFullYear(), start0UTC.getUTCMonth(), start0UTC.getUTCDate(), 12, 0, 0
+    );
+
     const d = new Date(start0UTC);
     for (;;) {
       const localNoon = new Date(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), 12, 0, 0);
@@ -88,6 +95,14 @@ export default function EventModal({ initial, onClose, onSaved }: Props) {
 
       const dow = localNoon.getDay();
       if (repeatDays[dow]) {
+        // filter by every N weeks if provided
+        if (providedEvery && providedEvery > 1) {
+          const weeksSinceStart = Math.floor((localNoon.getTime() - firstLocalNoon.getTime()) / (7 * 24 * 3600 * 1000));
+          if (weeksSinceStart % providedEvery !== 0) {
+            d.setUTCDate(d.getUTCDate() + 1);
+            continue;
+          }
+        }
         const y = localNoon.getFullYear();
         const m = String(localNoon.getMonth() + 1).padStart(2, "0");
         const day = String(localNoon.getDate()).padStart(2, "0");
@@ -100,21 +115,17 @@ export default function EventModal({ initial, onClose, onSaved }: Props) {
     }
     return out;
   };
+  // ————————————————————————————————————————————————————————————————
 
-  // NEW: accept server suggestion for next free time when conflict happens
-  const useSuggestion = async () => {
-    try {
-      const s = await suggestNext(asUTC(form.start), asUTC(form.end));
-      setForm({
-        ...form,
-        start: isoToLocalInput(s.start),
-        end:   isoToLocalInput(s.end),
-      });
-      setConflict(null);
-    } catch (e) {
-      console.error(e);
-      alert("Could not fetch a suggestion.");
-    }
+  // helper to apply a suggested slot into the form (convert ISO→local input)
+  const applySuggestion = (s: { start: string; end: string }) => {
+    setForm({
+      ...form,
+      start: isoToLocalInput(s.start),
+      end:   isoToLocalInput(s.end),
+    });
+    setConflict(null);
+    setSuggested(null);
   };
 
   const handleSave = async () => {
@@ -139,6 +150,11 @@ export default function EventModal({ initial, onClose, onSaved }: Props) {
             if ((err as AxiosError)?.response?.status === 409) {
               const data: any = (err as AxiosError).response?.data;
               setConflict(data?.detail?.conflicts?.[0] ?? null);
+              // NEW: ask backend for next free slot for THIS occurrence
+              try {
+                const s = await suggestNext(ev.start, ev.end);
+                setSuggested(s);
+              } catch {}
               return; // stop on first reported conflict
             } else {
               console.error(err);
@@ -156,12 +172,18 @@ export default function EventModal({ initial, onClose, onSaved }: Props) {
         : await createEvent(payload);
 
       setConflict(null);
+      setSuggested(null);
       onSaved(saved, isEdit ? "update" : "create");
       onClose();
     } catch (err: any) {
       if ((err as AxiosError)?.response?.status === 409) {
         const data: any = (err as AxiosError).response?.data;
         setConflict(data?.detail?.conflicts?.[0] ?? null);
+        // NEW: ask backend for next free slot for the single create/update
+        try {
+          const s = await suggestNext(payload.start, payload.end);
+          setSuggested(s);
+        } catch {}
       } else {
         console.error(err);
         alert("Couldn’t save. Check the browser console for details.");
@@ -188,13 +210,24 @@ export default function EventModal({ initial, onClose, onSaved }: Props) {
               –{" "}
               {new Date(conflict.end).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
             </p>
-            <button
-              type="button"
-              onClick={useSuggestion}
-              className="mt-2 text-xs underline"
-            >
-              Use next free time
-            </button>
+
+            {suggested && (
+              <div className="mt-2 flex items-center gap-2">
+                <span className="text-sm">
+                  Next free:{" "}
+                  {new Date(suggested.start).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
+                  {" – "}
+                  {new Date(suggested.end).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => applySuggestion(suggested)}
+                  className="ml-auto px-2 py-0.5 rounded bg-black text-white"
+                >
+                  Use it
+                </button>
+              </div>
+            )}
           </div>
         )}
 

@@ -83,27 +83,37 @@ export default function App() {
     reload();
     setModalInit(null);
   };
+// BEFORE
+// const handleNewSubmit = (p: Partial<EventIn> & { thumb?: string; repeatDays?: number[]; repeatUntil?: string }) => {
 
-  const handleNewSubmit = (p: Partial<EventIn> & { thumb?: string; repeatDays?: number[]; repeatUntil?: string }) => {
-    const now = new Date();
-    const defStart = new Date(now); defStart.setMinutes(0,0,0);
-    const defEnd   = new Date(defStart); defEnd.setHours(defStart.getHours() + 1);
+// AFTER
+const handleNewSubmit = (
+  p: Partial<EventIn> & {
+    thumb?: string;
+    repeatDays?: number[];
+    repeatUntil?: string;        // ← stays a STRING in YYYY-MM-DD (local date)
+    repeatEveryWeeks?: number;   // ← new optional number (e.g., 2 for biweekly)
+  }
+) => {
+  const now = new Date();
+  const defStart = new Date(now); defStart.setMinutes(0,0,0);
+  const defEnd   = new Date(defStart); defEnd.setHours(defStart.getHours() + 1);
 
-    const initial: ApiEvent = {
-      id: 0,
-      title: p.title ?? "",
-      start: p.start ?? defStart.toISOString().slice(0,19),
-      end:   p.end   ?? defEnd.toISOString().slice(0,19),
-    } as any;
+  const initial: ApiEvent = {
+    id: 0,
+    title: p.title ?? "",
+    start: p.start ?? defStart.toISOString().slice(0,19),
+    end:   p.end   ?? defEnd.toISOString().slice(0,19),
+  } as any;
 
-    (initial as any).thumb = p.thumb;
-    (initial as any).repeatDays = p.repeatDays;
-    (initial as any).repeatUntil = p.repeatUntil;
+  (initial as any).thumb = p.thumb;
+  (initial as any).repeatDays = p.repeatDays;
+  (initial as any).repeatUntil = p.repeatUntil;
+  (initial as any).repeatEveryWeeks = p.repeatEveryWeeks;  // ← add this
 
-    setModalInit(initial);
-    setShowNew(false);
-  };
-
+  setModalInit(initial);
+  setShowNew(false);
+};
   const CAL_HEIGHT = Math.max(320, vh - HEADER_H - TOOLBAR_H - EXTRA_PAD);
 
   return (

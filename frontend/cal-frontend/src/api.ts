@@ -29,6 +29,7 @@ export type ParsedFields = Partial<EventIn> & {
   thumb?: string;
   repeatDays?: number[];
   repeatUntil?: string;     // YYYY-MM-DD (local)
+  repeatEveryWeeks?: number; // ← NEW
 };
 
 // multipart upload

@@ -62,7 +62,9 @@ def ocr_to_text(data: bytes) -> str:
             pass
 
 # ───────────────────────── Helpers: prompt parsing ──────────────────
-# day name → 0..6
+from typing import Optional
+
+# day name → 0..6 (Sunday=0 to match JS Date.getDay)
 DOW_MAP = {
     "sunday": 0, "sun": 0,
     "monday": 1, "mon": 1,
@@ -83,6 +85,18 @@ TIME_RANGE_RE = re.compile(r"""
     \s*(?P<e_ampm>[ap]m)?          # optional am/pm for end
 """, re.IGNORECASE | re.VERBOSE)
 
+# single time like "4pm" / "4:15pm" / "16:00"
+TIME_SINGLE_RE = re.compile(
+    r"\b(?P<h>\d{1,2})(?::(?P<m>\d{2}))?\s*(?P<ampm>[ap]m)?\b",
+    re.IGNORECASE
+)
+
+# duration like "for 45m", "for 2h", "for 1 hour 30 min"
+DURATION_RE = re.compile(
+    r"\bfor\s+(?:(?P<h>\d+)\s*(?:hours?|hrs?|h))?\s*(?:(?P<m>\d+)\s*(?:minutes?|mins?|m))?\b",
+    re.IGNORECASE
+)
+
 # “until …” (8/31, 12/10, “Sept 15”, etc.)
 UNTIL_RE = re.compile(
     r"\buntil\s+(?P<date>(?:\d{1,2}/\d{1,2}(?:/\d{2,4})?"
@@ -90,7 +104,7 @@ UNTIL_RE = re.compile(
     re.IGNORECASE
 )
 
-# Lists like “Mon/Wed/Fri”, “Mon, Wed” — NO single-letter tokens anymore
+# Lists like “Mon/Wed/Fri”, “Mon, Wed”
 DAYS_LIST_RE = re.compile(r"""
     \b
     (?:(?:every|on)\s+)?                                  # optional prefix
@@ -109,10 +123,22 @@ DAYS_LIST_RE = re.compile(r"""
     \b
 """, re.IGNORECASE | re.VERBOSE)
 
-# For “explicit date” detection we ONLY accept slash-dates or month names
+# explicit-date detection (slash-dates or month names)
 DATE_TOKEN_RE = re.compile(
     r"\b(?:\d{1,2}/\d{1,2}(?:/\d{2,4})?"
     r"|(?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)\w*\s+\d{1,2})\b",
+    re.IGNORECASE
+)
+
+# "biweekly" / "every other week" / "every 2 weeks"
+EVERY_WEEKS_RE = re.compile(
+    r"\b(?:biweekly|every\s+other\s+week|every\s+(?P<n>\d+)\s+weeks?)\b",
+    re.IGNORECASE
+)
+
+# "for N weeks"
+FOR_WEEKS_RE = re.compile(
+    r"\bfor\s+(?P<n>\d+)\s+weeks?\b",
     re.IGNORECASE
 )
 
@@ -134,6 +160,28 @@ def parse_time_range(text: str):
     s_h, s_m = to_24h(s_h, s_m, m.group("s_ampm"))
     e_h, e_m = to_24h(e_h, e_m, m.group("e_ampm"))
     return (s_h, s_m, e_h, e_m)
+
+def parse_single_time_and_duration(text: str) -> Optional[tuple[int, int, int]]:
+    """
+    Returns (start_h, start_m, duration_minutes) if we find a single time and a duration.
+    Examples: "at 4pm for 45m", "4:15pm for 2h", "16:00 for 30m"
+    """
+    tm = TIME_SINGLE_RE.search(text)
+    if not tm:
+        return None
+    h = int(tm.group("h"))
+    m = int(tm.group("m") or 0)
+    h, m = to_24h(h, m, tm.group("ampm"))
+
+    dm = DURATION_RE.search(text)
+    if not dm:
+        return None
+    dh = int(dm.group("h") or 0)
+    dm_ = int(dm.group("m") or 0)
+    duration = dh * 60 + dm_
+    if duration <= 0:
+        duration = 60  # default if weird
+    return (h, m, duration)
 
 def parse_until_date(text: str, tz: ZoneInfo) -> Optional[date]:
     m = UNTIL_RE.search(text)
@@ -160,13 +208,12 @@ def parse_days_list(text: str) -> Optional[list[int]]:
     out: list[int] = []
     for p in parts:
         p = p.strip().lower()
-        # normalize to keys in DOW_MAP
-        if p in {"mon","monday","tue","tues","tuesday","wed","weds","wednesday",
-                 "thu","thur","thurs","thursday","fri","friday","sat","saturday",
-                 "sun","sunday"}:
-            key = {"mon":"monday","tue":"tuesday","tues":"tuesday","wed":"wednesday",
-                   "weds":"wednesday","thu":"thursday","thur":"thursday","thurs":"thursday",
-                   "fri":"friday","sat":"saturday","sun":"sunday"}.get(p, p)
+        key = {
+            "mon":"monday","tue":"tuesday","tues":"tuesday","wed":"wednesday","weds":"wednesday",
+            "thu":"thursday","thur":"thursday","thurs":"thursday",
+            "fri":"friday","sat":"saturday","sun":"sunday"
+        }.get(p, p)
+        if key in DOW_MAP:
             out.append(DOW_MAP[key])
     return sorted(set(out)) or None
 
@@ -181,9 +228,34 @@ def parse_repeat(text: str) -> Optional[list[int]]:
         return dl
     return None
 
+def parse_every_weeks(text: str) -> Optional[int]:
+    m = EVERY_WEEKS_RE.search(text)
+    if not m:
+        return None
+    if m.group("n"):
+        try:
+            n = int(m.group("n"))
+            return max(1, n)
+        except Exception:
+            return 2
+    # "biweekly" or "every other week"
+    return 2
+
+def parse_for_weeks(text: str) -> Optional[int]:
+    m = FOR_WEEKS_RE.search(text)
+    if not m:
+        return None
+    try:
+        return max(1, int(m.group("n")))
+    except Exception:
+        return None
+
 def scrub_title(text: str) -> str:
-    # remove recurrence & time phrases from the title
+    # remove recurrence, time, duration phrases from the title
     t = UNTIL_RE.sub("", text)
+    t = FOR_WEEKS_RE.sub("", t)
+    t = EVERY_WEEKS_RE.sub("", t)
+    t = DURATION_RE.sub("", t)
     t = TIME_RANGE_RE.sub("", t)
     t = re.sub(r"\b(daily|every\s+day|everyday|every\s+weekday|weekday|weekdays)\b", "", t, flags=re.IGNORECASE)
     t = DAYS_LIST_RE.sub("", t)   # e.g., "Mon/Wed"
@@ -191,7 +263,6 @@ def scrub_title(text: str) -> str:
     return (t or "Untitled").strip()
 
 def build_iso(dt_local: datetime, tz: ZoneInfo) -> str:
-    # attach tz and convert to UTC Z
     dt_local = dt_local.replace(tzinfo=tz)
     return dt_local.astimezone(ZoneInfo("UTC")).isoformat().replace("+00:00", "Z")
 
@@ -208,6 +279,8 @@ def health_check():
 @app.get("/")
 def read_root():
     return {"message": "FastAPI backend is running."}
+# ───────────────────────── Suggest next free slot ───────────────────
+from dateutil.parser import isoparse as iso_parse
 
 # Upload → OCR → naive parse
 @app.post("/uploads", status_code=201)
@@ -264,7 +337,7 @@ async def upload_file(file: UploadFile = File(...)):
 async def parse_prompt(payload: dict):
     """
     Expects: { "prompt": string, "tz": "America/Los_Angeles" }
-    Returns: { title?, start?, end?, repeatDays?, repeatUntil? }
+    Returns: { title?, start?, end?, repeatDays?, repeatUntil?, repeatEveryWeeks? }
     All times returned as UTC ISO Z; repeatUntil as YYYY-MM-DD (local date)
     """
     prompt = (payload.get("prompt") or "").strip()
@@ -277,21 +350,30 @@ async def parse_prompt(payload: dict):
     if not prompt:
         return {}
 
-    # 1) time range
+    # 1) time: range? single+duration? default 09:00–10:00
     tr = parse_time_range(prompt)
-    # default to 09:00–10:00 if none
+    s_h = s_m = e_h = e_m = None
     if tr:
         s_h, s_m, e_h, e_m = tr
     else:
-        s_h, s_m, e_h, e_m = (9, 0, 10, 0)
+        one = parse_single_time_and_duration(prompt)
+        if one:
+            s_h, s_m, dur = one
+            # compute end from duration
+            end_dt = datetime(2000, 1, 1, s_h, s_m) + timedelta(minutes=dur)
+            e_h, e_m = end_dt.hour, end_dt.minute
+        else:
+            s_h, s_m, e_h, e_m = (9, 0, 10, 0)
 
-    # 2) repeat
-    repeat_days = parse_repeat(prompt)
+    # 2) repeat days and cadence
+    repeat_days = parse_repeat(prompt)                 # e.g., [1,3,5]
+    every_weeks = parse_every_weeks(prompt)            # e.g., 2 for biweekly
+    for_weeks   = parse_for_weeks(prompt)              # e.g., 8
 
-    # 3) until
+    # 3) until (explicit)
     until_d = parse_until_date(prompt, tz)
 
-    # 4) base date:
+    # 4) base date
     explicit_date = None
     try:
         if DATE_TOKEN_RE.search(prompt):
@@ -303,6 +385,16 @@ async def parse_prompt(payload: dict):
     today_local = datetime.now(tz).date()
     base_date = explicit_date or today_local
 
+    # If biweekly/every N weeks but no explicit days, use the base weekday
+    if every_weeks and not repeat_days:
+        # Python weekday(): Mon=0..Sun=6  → JS/our map: Sun=0..Sat=6
+        js_dow = (base_date.weekday() + 1) % 7
+        repeat_days = [js_dow]
+
+    # If “for N weeks” provided and no explicit until, compute it from base_date
+    if for_weeks and not until_d:
+        until_d = base_date + timedelta(weeks=for_weeks)
+
     # 5) title
     title = scrub_title(prompt)
 
@@ -310,20 +402,18 @@ async def parse_prompt(payload: dict):
     start_local = datetime(base_date.year, base_date.month, base_date.day, s_h, s_m, 0)
     end_local   = datetime(base_date.year, base_date.month, base_date.day, e_h, e_m, 0)
     if end_local <= start_local:
-        end_local += timedelta(hours=1)  # safety
+        end_local += timedelta(hours=1)
 
     start_iso = build_iso(start_local, tz)
     end_iso   = build_iso(end_local, tz)
 
-    out: dict = {
-        "title": title,
-        "start": start_iso,
-        "end": end_iso,
-    }
+    out: dict = { "title": title, "start": start_iso, "end": end_iso }
     if repeat_days:
         out["repeatDays"] = repeat_days
     if until_d:
         out["repeatUntil"] = until_d.isoformat()
+    if every_weeks:
+        out["repeatEveryWeeks"] = every_weeks
 
     return out
 
