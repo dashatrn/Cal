@@ -20,6 +20,9 @@ const HEADER_H = 64;   // h-16
 const TOOLBAR_H = 48;  // h-12
 const EXTRA_PAD = 16;  // breathing room
 
+const LS_VIEW = "cal:view";
+const LS_DATE = "cal:date";
+
 export default function App() {
   const [events, setEvents] = useState<CalEvent[]>([]);
   const [modalInit, setModalInit] = useState<ApiEvent | undefined | null>(null);
@@ -30,20 +33,32 @@ export default function App() {
   const gotoDate  = (iso: string) => calRef.current?.getApi().gotoDate(iso);
   const gotoPrev  = () => calRef.current?.getApi().prev();
   const gotoNext  = () => calRef.current?.getApi().next();
+  const gotoToday = () => calRef.current?.getApi().today();
 
   const reload = () =>
     listEvents()
       .then((api) => setEvents(api.map((e) => ({ ...e, id: e.id.toString() }))))
       .catch(console.error);
 
+  // initial load + restore last view/date
   useEffect(() => {
     reload().then(() => {
-      const last = events.at(-1);
-      if (last) gotoDate(last.start);
+      const api = calRef.current?.getApi();
+      const savedView = localStorage.getItem(LS_VIEW) as any;
+      const savedDate = localStorage.getItem(LS_DATE) as any;
+      if (api) {
+        if (savedView) api.changeView(savedView);
+        if (savedDate) api.gotoDate(savedDate);
+        else {
+          const last = events.at(-1);
+          if (last) api.gotoDate(last.start);
+        }
+      }
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // height recompute on resize
   useEffect(() => {
     const onResize = () => {
       setVh(window.innerHeight);
@@ -106,6 +121,7 @@ export default function App() {
 
         <div className="h-12 flex items-center justify-between px-4 md:px-8 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
           <div className="space-x-1 text-sm">
+            <button onClick={gotoToday} className="px-2 py-1 rounded hover:bg-gray-100 dark:hover:bg-gray-700">Today</button>
             {(["dayGridDay", "timeGridWeek", "dayGridMonth"] as const).map((v) => (
               <button
                 key={v}
@@ -139,7 +155,7 @@ export default function App() {
             plugins={[dayGridPlugin, timeGridPlugin, interactionPlugin]}
             initialView="timeGridWeek"
             headerToolbar={false}
-            timeZone="local"                 // <-- make rendering explicitly local
+            timeZone="local"
             height={CAL_HEIGHT}
             eventDisplay="block"
             events={events as EventInput[]}
@@ -147,6 +163,12 @@ export default function App() {
             eventClick={(arg: EventClickArg) => {
               const e = events.find((x) => x.id === arg.event.id);
               if (e) openEdit({ ...e, id: +e.id });
+            }}
+            datesSet={(arg) => {
+              // persist current view & anchor date
+              localStorage.setItem(LS_VIEW, arg.view.type);
+              const current = calRef.current?.getApi().getDate();
+              if (current) localStorage.setItem(LS_DATE, current.toISOString());
             }}
           />
         </main>

@@ -1,11 +1,11 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { AxiosError } from "axios";
 import type { EventOut, EventIn } from "./api";
 import { createEvent, updateEvent, deleteEvent } from "./api";
 import { isoToLocalInput, localInputToISO, nowLocalInput } from "./datetime";
 
 interface Props {
-  initial?: EventOut | null;
+  initial?: EventOut | null; // we’ll read optional extras via (initial as any)
   onClose(): void;
   onSaved(e: EventOut, mode: "create" | "update" | "delete"): void;
 }
@@ -13,11 +13,11 @@ interface Props {
 const WEEK = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"] as const;
 
 export default function EventModal({ initial, onClose, onSaved }: Props) {
-  const isoNowLocal = nowLocalInput(); // yyyy-mm-ddThh:mm in local time
+  const isoNowLocal = nowLocalInput(); // yyyy-mm-ddThh:mm (local)
 
   const [form, setForm] = useState<EventIn>({
     title: initial?.title ?? "",
-    // convert any ISO coming from API (UTC Z) into local input values
+    // convert ISO(UTC) from API into local input value
     start: initial?.start ? isoToLocalInput(initial.start) : isoNowLocal,
     end:   initial?.end   ? isoToLocalInput(initial.end)   : isoNowLocal,
   });
@@ -29,28 +29,49 @@ export default function EventModal({ initial, onClose, onSaved }: Props) {
   }>(null);
 
   const isEdit = typeof initial?.id === "number" && initial.id !== 0;
+
   const change =
     (k: keyof EventIn) =>
     (e: React.ChangeEvent<HTMLInputElement>) =>
       setForm({ ...form, [k]: e.target.value });
 
-  // --- Repeat controls (v1) -----------------------------------------
-  const [repeatOpen, setRepeatOpen] = useState(false);
+  // —— Repeat (v1) ————————————————————————————————————————————————
+  // pull optional pre-parsed values (when coming from NewEventModal)
+  const providedDays   = (initial as any)?.repeatDays as number[] | undefined;
+  const providedUntil  = (initial as any)?.repeatUntil as string | undefined;
+
+  const [repeatOpen, setRepeatOpen] = useState<boolean>(false);
   const [repeatDays, setRepeatDays] = useState<Record<number, boolean>>({
-    0: false, 1: false, 2: false, 3: false, 4: false, 5: false, 6: false,
+    0:false,1:false,2:false,3:false,4:false,5:false,6:false,
   });
   const [repeatUntil, setRepeatUntil] = useState<string>(""); // yyyy-mm-dd
+
+  // apply provided repeat values once on mount
+  useEffect(() => {
+    if ((providedDays && providedDays.length) || providedUntil) {
+      setRepeatOpen(true);
+    }
+    if (providedDays?.length) {
+      setRepeatDays(prev => {
+        const m = { ...prev };
+        providedDays.forEach(d => { if (d >= 0 && d <= 6) m[d] = true; });
+        return m;
+      });
+    }
+    if (providedUntil) setRepeatUntil(providedUntil);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const toggleDay = (d: number) =>
     setRepeatDays({ ...repeatDays, [d]: !repeatDays[d] });
 
   const anyRepeat = Object.values(repeatDays).some(Boolean) && !!repeatUntil;
 
-  // normalize local input to ISO (UTC Z)
+  // normalize local input → ISO(UTC) that backend expects
   const asUTC = (s: string) => localInputToISO(s);
 
+  // preserve the same local hh:mm but move to a different date (ymd), then ISO(UTC)
   const sameTimeOnDate = (baseStartLocal: string, baseEndLocal: string, ymd: string) => {
-    // take the hh:mm from baseStartLocal, baseEndLocal and apply to date ymd (local), then convert to UTC ISO
     const startTime = baseStartLocal.split("T")[1]; // hh:mm
     const endTime   = baseEndLocal.split("T")[1];
     const startISO  = localInputToISO(`${ymd}T${startTime}`);
@@ -59,21 +80,24 @@ export default function EventModal({ initial, onClose, onSaved }: Props) {
   };
 
   const enumerateRepeats = (): EventIn[] => {
-    const start0 = new Date(asUTC(form.start)); // UTC date for the first entry
-    const until  = repeatUntil ? new Date(`${repeatUntil}T23:59:59`) : null;
+    const start0UTC = new Date(asUTC(form.start)); // UTC anchor for walking
+    const until     = repeatUntil ? new Date(`${repeatUntil}T23:59:59`) : null;
     const out: EventIn[] = [];
     if (!until) return out;
 
-    const d = new Date(start0); // walk day by day in local terms
-    // Walk by local midnights:
+    const d = new Date(start0UTC);
+    // walk by days using UTC date math, then convert to local calendar-day via "noon trick"
     for (;;) {
-      const local = new Date(
-        d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), 12, 0, 0
-      ); // force local date using noon trick (avoids DST edge)
-      if (local > until) break;
-      const dow = local.getDay();
+      const localNoon = new Date(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), 12, 0, 0);
+      if (localNoon > until) break;
+
+      const dow = localNoon.getDay();
       if (repeatDays[dow]) {
-        const ymd = `${local.getFullYear()}-${String(local.getMonth()+1).padStart(2,"0")}-${String(local.getDate()).padStart(2,"0")}`;
+        const y = localNoon.getFullYear();
+        const m = String(localNoon.getMonth() + 1).padStart(2, "0");
+        const day = String(localNoon.getDate()).padStart(2, "0");
+        const ymd = `${y}-${m}-${day}`;
+
         const { startISO, endISO } = sameTimeOnDate(form.start, form.end, ymd);
         out.push({ title: form.title, start: startISO, end: endISO });
       }
@@ -81,6 +105,7 @@ export default function EventModal({ initial, onClose, onSaved }: Props) {
     }
     return out;
   };
+  // ————————————————————————————————————————————————————————————————
 
   const handleSave = async () => {
     const payload: EventIn = {
@@ -104,7 +129,7 @@ export default function EventModal({ initial, onClose, onSaved }: Props) {
             if ((err as AxiosError)?.response?.status === 409) {
               const data: any = (err as AxiosError).response?.data;
               setConflict(data?.detail?.conflicts?.[0] ?? null);
-              return;
+              return; // stop on first reported conflict
             } else {
               console.error(err);
               alert("Couldn’t save one of the repeats. Check the console.");
