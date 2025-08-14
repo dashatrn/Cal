@@ -1,26 +1,34 @@
-# render.yaml (put at the repo root)
+# render.yaml (put this at the repo root)
+
 services:
+  # ───────── Backend API (FastAPI in Docker) ─────────
   - type: web
     name: cal-api
     env: docker
     rootDir: backend
     plan: free
-    dockerCommand: uvicorn app.main:app --host 0.0.0.0 --port 8000
+    # Optional: if you want Render to use the Dockerfile's CMD, omit dockerCommand.
+    # Your Dockerfile already starts uvicorn, so this line is not required.
+    # dockerCommand: uvicorn app.main:app --host 0.0.0.0 --port 8000
     envVars:
-      - key: DATABASE_URL           # set this AFTER the DB is created (step 2)
-        sync: false
-      - key: FRONTEND_ORIGIN        # set this AFTER the frontend exists (step 4)
-        sync: false
+      # Using your Neon connection string
+      - key: DATABASE_URL
+        value: "postgresql://neondb_owner:npg_PQmCIMV0dU8O@ep-plain-hall-ae269dp6-pooler.c-2.us-east-2.aws.neon.tech/neondb?sslmode=require&channel_binding=require"
+      # For CORS: your backend currently allows "*", so this is not strictly needed,
+      # but you asked me to fill it. We’ll set it to the static site URL below.
+      - key: FRONTEND_ORIGIN
+        value: "https://cal-frontend.onrender.com"
 
-  - type: static
+  # ───────── Frontend (Vite build, static hosting) ─────────
+  - type: web
     name: cal-frontend
+    runtime: static
     rootDir: frontend/cal-frontend
     buildCommand: npm ci && npm run build
     staticPublishPath: dist
     envVars:
-      - key: VITE_API_URL           # set this AFTER cal-api is live (step 3)
-        sync: false
-
-databases:
-  - name: cal-db
-    plan: free
+      # Point the frontend at the API. This URL will be the public URL if the
+      # service name "cal-api" is available. If Render assigns a different subdomain,
+      # just update this one value after creation.
+      - key: VITE_API_URL
+        value: "https://cal-api.onrender.com"
