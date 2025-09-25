@@ -8,15 +8,24 @@ const envURL = import.meta.env.VITE_API_URL as string | undefined;
 const devURL = `${window.location.protocol}//${window.location.hostname.replace("-5173", "-8000")}`;
 
 // final choice (strip trailing “/”)
-const BASE_URL = (envURL ?? devURL).replace(/\/+$/, "");
+// final choice (strip trailing "/")
+export const BASE_URL = (envURL ?? devURL).replace(/\/+$/, "");
 
 export const api = axios.create({
   baseURL: BASE_URL,
   headers: { "Content-Type": "application/json" },
 });
 
-export interface EventIn  { title: string; start: string; end: string }
-export interface EventOut extends EventIn { id: number }
+export interface EventIn  {
+  title: string;
+  start: string;
+  end:   string;
+  // add these two:
+  description?: string | null;
+  location?: string | null;
+}
+
+export interface EventOut extends EventIn { id: number }export interface EventOut extends EventIn { id: number }
 
 // Calendar CRUD
 // NOTE: start/end are optional and safe to send even if the backend ignores them.

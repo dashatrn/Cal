@@ -3,10 +3,15 @@ import FullCalendar from "@fullcalendar/react";
 import dayGridPlugin from "@fullcalendar/daygrid";
 import timeGridPlugin from "@fullcalendar/timegrid";
 import interactionPlugin from "@fullcalendar/interaction";
-import type { DateClickArg } from "@fullcalendar/interaction";
-import type { EventClickArg, EventInput } from "@fullcalendar/core";
+import type { DateClickArg, EventResizeDoneArg } from "@fullcalendar/interaction";
 
-import { listEvents } from "./api";
+import type {
+  EventDropArg,
+  EventClickArg,
+  EventInput,
+  EventContentArg,
+} from "@fullcalendar/core";
+import { listEvents, updateEvent, suggestNext, BASE_URL } from "./api";
 import type { EventOut as ApiEvent, EventIn } from "./api";
 import EventModal from "./EventModal";
 import NewEventModal from "./NewEventModal";
@@ -35,13 +40,13 @@ export default function App() {
   const gotoNext  = () => calRef.current?.getApi().next();
   const gotoToday = () => calRef.current?.getApi().today();
 
-  // UPDATED: accept optional range (works even if backend ignores params)
+  // range-aware reload (safe if backend ignores params)
   const reload = (start?: string, end?: string) =>
     listEvents(start, end)
       .then((api) => setEvents(api.map((e) => ({ ...e, id: e.id.toString() }))))
       .catch(console.error);
 
-  // initial load + restore last view/date
+  // initial load + restore view/date
   useEffect(() => {
     reload().then(() => {
       const api = calRef.current?.getApi();
@@ -89,8 +94,8 @@ export default function App() {
     p: Partial<EventIn> & {
       thumb?: string;
       repeatDays?: number[];
-      repeatUntil?: string;        // ← stays a STRING in YYYY-MM-DD (local date)
-      repeatEveryWeeks?: number;   // ← new optional number (e.g., 2 for biweekly)
+      repeatUntil?: string;        // YYYY-MM-DD (local)
+      repeatEveryWeeks?: number;   // e.g., 2 for biweekly
     }
   ) => {
     const now = new Date();
@@ -107,13 +112,100 @@ export default function App() {
     (initial as any).thumb = p.thumb;
     (initial as any).repeatDays = p.repeatDays;
     (initial as any).repeatUntil = p.repeatUntil;
-    (initial as any).repeatEveryWeeks = p.repeatEveryWeeks;  // ← add this
+    (initial as any).repeatEveryWeeks = p.repeatEveryWeeks;
 
     setModalInit(initial);
     setShowNew(false);
   };
 
   const CAL_HEIGHT = Math.max(320, vh - HEADER_H - TOOLBAR_H - EXTRA_PAD);
+
+  // ---------- ICS export for visible range ----------
+  const exportICS = () => {
+    const api = calRef.current?.getApi();
+    if (!api) return;
+    const start = api.view.activeStart.toISOString();
+    const end   = api.view.activeEnd.toISOString();
+    const url = `${BASE_URL}/events.ics?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`;
+    window.open(url, "_blank");
+  };
+
+  // ---------- Drag/drop + resize handlers ----------
+  const buildPayloadFromEvent = (fc: any): EventIn => {
+    // fc is FullCalendar's EventApi
+    const ext = fc.extendedProps || {};
+    // Important: toISOString() -> UTC ISO (backend expects that)
+    const startIso = fc.start ? fc.start.toISOString() : new Date().toISOString();
+    const endIso   = fc.end   ? fc.end.toISOString()   : new Date(fc.start.getTime()+60*60*1000).toISOString();
+    return {
+      title: fc.title,
+      start: startIso,
+      end:   endIso,
+      // include optional fields if present
+      description: typeof ext.description === "string" ? ext.description : undefined,
+      location:    typeof ext.location === "string" ? ext.location : undefined,
+    };
+  };
+
+  async function applyUpdateOrSuggest(fcEvent: any, revert: () => void) {
+    const id = Number(fcEvent.id);
+    const payload = buildPayloadFromEvent(fcEvent);
+
+    try {
+      await updateEvent(id, payload);
+      reload(); // reflect changes
+    } catch (err: any) {
+      // try suggestion on conflict
+      if (err?.response?.status === 409) {
+        try {
+          const s = await suggestNext(payload.start, payload.end);
+          const ok = window.confirm(
+            `That time conflicts. Use next free slot?\n\n` +
+            `${new Date(s.start).toLocaleString()} – ${new Date(s.end).toLocaleTimeString()}`);
+          if (ok) {
+            // move the dragged/resized event visually, then save again
+            fcEvent.setStart(new Date(s.start));
+            fcEvent.setEnd(new Date(s.end));
+            await updateEvent(id, buildPayloadFromEvent(fcEvent));
+            reload();
+            return;
+          }
+        } catch {
+          /* ignore suggest errors; we’ll revert */
+        }
+      }
+      // anything else → revert
+      revert();
+    }
+  }
+
+  const onEventDrop = async (arg: EventDropArg) => {
+    await applyUpdateOrSuggest(arg.event, arg.revert);
+  };
+
+  const onEventResize = async (arg: EventResizeDoneArg) => {
+    await applyUpdateOrSuggest(arg.event, arg.revert);
+  };
+
+  // Nice compact event rendering: title + (location)
+  const renderEvent = (arg: EventContentArg) => {
+    const loc = arg.event.extendedProps?.location as string | undefined;
+    const root = document.createElement("div");
+    const title = document.createElement("div");
+    title.textContent = arg.event.title || "(untitled)";
+    title.style.fontWeight = "600";
+    title.style.fontSize = "0.82rem";
+    root.appendChild(title);
+
+    if (loc) {
+      const el = document.createElement("div");
+      el.textContent = loc;
+      el.style.fontSize = "0.72rem";
+      el.style.opacity = "0.8";
+      root.appendChild(el);
+    }
+    return { domNodes: [root] };
+  };
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
@@ -126,6 +218,14 @@ export default function App() {
             + New
           </button>
           <h1 className="text-xl font-semibold select-none">Cal</h1>
+
+          <button
+            onClick={exportICS}
+            className="absolute right-6 px-3 py-1 rounded border"
+            title="Export current view to ICS"
+          >
+            Export ICS
+          </button>
         </header>
 
         <div className="h-12 flex items-center justify-between px-4 md:px-8 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
@@ -168,6 +268,17 @@ export default function App() {
             height={CAL_HEIGHT}
             eventDisplay="block"
             events={events as EventInput[]}
+            editable={true}                // ← enable drag & resize
+            eventDrop={onEventDrop}
+            eventResize={onEventResize}
+            eventContent={renderEvent}
+            eventDidMount={(info) => {
+              // Simple tooltip using title attribute with description if present
+              const desc = info.event.extendedProps?.description as string | undefined;
+              const loc  = info.event.extendedProps?.location as string | undefined;
+              const bits = [loc, desc].filter(Boolean);
+              if (bits.length) info.el.title = bits.join("\n\n");
+            }}
             dateClick={(arg: DateClickArg) => openCreate(arg.dateStr)}
             eventClick={(arg: EventClickArg) => {
               const e = events.find((x) => x.id === arg.event.id);
@@ -178,8 +289,7 @@ export default function App() {
               localStorage.setItem(LS_VIEW, arg.view.type);
               const current = calRef.current?.getApi().getDate();
               if (current) localStorage.setItem(LS_DATE, current.toISOString());
-
-              // NEW: fetch only visible range (safe even if backend ignores)
+              // fetch only visible range (safe if backend ignores)
               const startStr = arg.startStr; // ISO
               const endStr   = arg.endStr;   // ISO (exclusive)
               reload(startStr, endStr);
