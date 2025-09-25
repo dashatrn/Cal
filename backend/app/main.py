@@ -1,8 +1,8 @@
-# app/main.py
-from datetime import datetime, date, timedelta
+# backend/app/main.py
+from datetime import datetime, date, timedelta, timezone
 from typing import Optional
 
-from fastapi import FastAPI, Depends, HTTPException, status, UploadFile, File
+from fastapi import FastAPI, Depends, HTTPException, status, UploadFile, File, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy.orm import Session
@@ -12,12 +12,13 @@ from pathlib import Path
 import uuid
 import tempfile
 import re
+from os import getenv
 
-from dateutil import parser as dtparse          # pip install python-dateutil
+from dateutil import parser as dtparse
 from dateutil.parser import isoparse as iso_parse
-import pytesseract                              # pip install pytesseract pillow
-from PIL import Image                           # pip install pillow
-from zoneinfo import ZoneInfo                   # py3.9+
+import pytesseract
+from PIL import Image
+from zoneinfo import ZoneInfo
 
 # ── local modules ───────────────────────────────────────────────────
 from .db import Base, engine, get_db
@@ -28,17 +29,22 @@ from .schemas import EventIn, EventOut
 app = FastAPI(title="Cal API")
 
 # ───────────────────────── CORS ─────────────────────────────────────
-from os import getenv
-origins = [
-    getenv("FRONTEND_ORIGIN", "http://localhost:5173"),
-]
+frontend_origin = getenv("FRONTEND_ORIGIN")
 codespaces_origin = getenv("CODESPACES_FRONTEND")
+
+origins: list[str] = []
+if frontend_origin:
+    origins.append(frontend_origin)
 if codespaces_origin:
     origins.append(codespaces_origin)
+if not origins:
+    # dev-friendly; set FRONTEND_ORIGIN in prod to lock down
+    origins = ["*"]
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],          # dev-friendly; lock down later
+    allow_origins=origins,
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -62,8 +68,6 @@ def ocr_to_text(data: bytes) -> str:
             pass
 
 # ───────────────────────── Helpers: prompt parsing ──────────────────
-from typing import Optional
-
 # day name → 0..6 (Sunday=0 to match JS Date.getDay)
 DOW_MAP = {
     "sunday": 0, "sun": 0,
@@ -85,26 +89,19 @@ TIME_RANGE_RE = re.compile(r"""
     \s*(?P<e_ampm>[ap]m)?          # optional am/pm for end
 """, re.IGNORECASE | re.VERBOSE)
 
-# single time like "4pm" / "4:15pm" / "16:00"
 TIME_SINGLE_RE = re.compile(
     r"\b(?P<h>\d{1,2})(?::(?P<m>\d{2}))?\s*(?P<ampm>[ap]m)?\b",
     re.IGNORECASE
 )
-
-# duration like "for 45m", "for 2h", "for 1 hour 30 min"
 DURATION_RE = re.compile(
     r"\bfor\s+(?:(?P<h>\d+)\s*(?:hours?|hrs?|h))?\s*(?:(?P<m>\d+)\s*(?:minutes?|mins?|m))?\b",
     re.IGNORECASE
 )
-
-# “until …” (8/31, 12/10, “Sept 15”, etc.)
 UNTIL_RE = re.compile(
     r"\buntil\s+(?P<date>(?:\d{1,2}/\d{1,2}(?:/\d{2,4})?"
     r"|(?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)\w*\s+\d{1,2}(?:,\s*\d{4})?))",
     re.IGNORECASE
 )
-
-# Lists like “Mon/Wed/Fri”, “Mon, Wed”
 DAYS_LIST_RE = re.compile(r"""
     \b
     (?:(?:every|on)\s+)?                                  # optional prefix
@@ -122,21 +119,15 @@ DAYS_LIST_RE = re.compile(r"""
     )
     \b
 """, re.IGNORECASE | re.VERBOSE)
-
-# explicit-date detection (slash-dates or month names)
 DATE_TOKEN_RE = re.compile(
     r"\b(?:\d{1,2}/\d{1,2}(?:/\d{2,4})?"
     r"|(?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)\w*\s+\d{1,2})\b",
     re.IGNORECASE
 )
-
-# "biweekly" / "every other week" / "every 2 weeks"
 EVERY_WEEKS_RE = re.compile(
     r"\b(?:biweekly|every\s+other\s+week|every\s+(?P<n>\d+)\s+weeks?)\b",
     re.IGNORECASE
 )
-
-# "for N weeks"
 FOR_WEEKS_RE = re.compile(
     r"\bfor\s+(?P<n>\d+)\s+weeks?\b",
     re.IGNORECASE
@@ -162,10 +153,6 @@ def parse_time_range(text: str):
     return (s_h, s_m, e_h, e_m)
 
 def parse_single_time_and_duration(text: str) -> Optional[tuple[int, int, int]]:
-    """
-    Returns (start_h, start_m, duration_minutes) if we find a single time and a duration.
-    Examples: "at 4pm for 45m", "4:15pm for 2h", "16:00 for 30m"
-    """
     tm = TIME_SINGLE_RE.search(text)
     if not tm:
         return None
@@ -180,7 +167,7 @@ def parse_single_time_and_duration(text: str) -> Optional[tuple[int, int, int]]:
     dm_ = int(dm.group("m") or 0)
     duration = dh * 60 + dm_
     if duration <= 0:
-        duration = 60  # default if weird
+        duration = 60
     return (h, m, duration)
 
 def parse_until_date(text: str, tz: ZoneInfo) -> Optional[date]:
@@ -192,7 +179,6 @@ def parse_until_date(text: str, tz: ZoneInfo) -> Optional[date]:
         dt = dtparse.parse(raw, fuzzy=True, default=datetime.now(tz))
         today = datetime.now(tz).date()
         d = dt.date()
-        # If no year and it parsed into past, roll to next year
         if d < today and re.match(r"^\d{1,2}/\d{1,2}$", raw.strip()):
             d = date(today.year + 1, d.month, d.day)
         return d
@@ -238,7 +224,6 @@ def parse_every_weeks(text: str) -> Optional[int]:
             return max(1, n)
         except Exception:
             return 2
-    # "biweekly" or "every other week"
     return 2
 
 def parse_for_weeks(text: str) -> Optional[int]:
@@ -251,14 +236,13 @@ def parse_for_weeks(text: str) -> Optional[int]:
         return None
 
 def scrub_title(text: str) -> str:
-    # remove recurrence, time, duration phrases from the title
     t = UNTIL_RE.sub("", text)
     t = FOR_WEEKS_RE.sub("", t)
     t = EVERY_WEEKS_RE.sub("", t)
     t = DURATION_RE.sub("", t)
     t = TIME_RANGE_RE.sub("", t)
     t = re.sub(r"\b(daily|every\s+day|everyday|every\s+weekday|weekday|weekdays)\b", "", t, flags=re.IGNORECASE)
-    t = DAYS_LIST_RE.sub("", t)   # e.g., "Mon/Wed"
+    t = DAYS_LIST_RE.sub("", t)
     t = re.sub(r"\s{2,}", " ", t).strip(" ,.-\n\t")
     return (t or "Untitled").strip()
 
@@ -266,7 +250,7 @@ def build_iso(dt_local: datetime, tz: ZoneInfo) -> str:
     dt_local = dt_local.replace(tzinfo=tz)
     return dt_local.astimezone(ZoneInfo("UTC")).isoformat().replace("+00:00", "Z")
 
-# ───────────────────────── Routes ───────────────────────────────────
+# ───────────────────────── Lifecycle & health ───────────────────────
 
 @app.on_event("startup")
 def init_db() -> None:
@@ -279,14 +263,12 @@ def health_check():
 @app.get("/")
 def read_root():
     return {"message": "FastAPI backend is running."}
-# ───────────────────────── Suggest next free slot ───────────────────
-from dateutil.parser import isoparse as iso_parse
 
-# Upload → OCR → naive parse
+# ───────────────────────── Uploads → OCR ────────────────────────────
+
 @app.post("/uploads", status_code=201)
 async def upload_file(file: UploadFile = File(...)):
     raw = await file.read()
-    # save original
     ext = (Path(file.filename).suffix or ".png").lower()
     filename = f"{uuid.uuid4().hex}{ext}"
     dest = UPLOAD_DIR / filename
@@ -297,7 +279,6 @@ async def upload_file(file: UploadFile = File(...)):
     print(text)
     print("──────────────────")
 
-    # very naive: find first date line and time range line
     date_re = re.compile(
         r"\b(\d{4}[-/]\d{1,2}[-/]\d{1,2}|\d{1,2}[-/]\d{1,2}[-/]\d{2,4}|\w+\s+\d{1,2},\s*\d{4})\b",
         re.IGNORECASE,
@@ -308,7 +289,6 @@ async def upload_file(file: UploadFile = File(...)):
         raise HTTPException(status_code=422, detail="Could not parse date/time")
 
     date_iso = dtparse.parse(date_m.group(1)).date().isoformat()
-
     tr = parse_time_range(text)
     if not tr:
         raise HTTPException(status_code=422, detail="Could not parse time range")
@@ -320,7 +300,7 @@ async def upload_file(file: UploadFile = File(...)):
     lines = [ln.strip() for ln in text.splitlines() if ln.strip()]
     try:
         date_idx = next(i for i, l in enumerate(lines) if date_re.search(l))
-        title = lines[date_idx + 2]  # heuristic
+        title = lines[date_idx + 2]
     except Exception:
         title = lines[0] if lines else "Untitled"
     title = title[:200]
@@ -332,7 +312,8 @@ async def upload_file(file: UploadFile = File(...)):
         "thumb": f"/uploads/{filename}",
     }
 
-# Prompt → smart-ish parse (local TZ aware)
+# ───────────────────────── Parse prompt (TZ aware) ──────────────────
+
 @app.post("/parse")
 async def parse_prompt(payload: dict):
     """
@@ -350,7 +331,47 @@ async def parse_prompt(payload: dict):
     if not prompt:
         return {}
 
-    # 1) time: range? single+duration? default 09:00–10:00
+    # Lightweight normalization: noon/midnight and relative dates.
+    raw = prompt
+    raw = re.sub(r"\bnoon\b", "12:00pm", raw, flags=re.I)
+    raw = re.sub(r"\bmidnight\b", "12:00am", raw, flags=re.I)
+
+    today = datetime.now(tz).date()
+    WEEKDAY = {"mon":0,"tue":1,"tues":1,"wed":2,"thu":3,"thur":3,"thurs":3,"fri":4,"sat":5,"sun":6}
+
+    def next_weekday(base: date, target_idx: int, inclusive=False) -> date:
+        cur = base.weekday()  # Mon=0..Sun=6
+        delta = (target_idx - cur) % 7
+        if delta == 0 and not inclusive:
+            delta = 7
+        return base + timedelta(days=delta)
+
+    def replace_relative(m: re.Match) -> str:
+        w = m.group(0).lower()
+        if w == "today":
+            return today.isoformat()
+        if w == "tomorrow":
+            return (today + timedelta(days=1)).isoformat()
+        mt = re.match(r"(this|next)\s+(mon|tue|tues|wed|thu|thur|thurs|fri|sat|sun)", w)
+        if mt:
+            kind, wd = mt.groups()
+            idx = WEEKDAY[wd]
+            if kind == "this":
+                d = next_weekday(today, idx, inclusive=True)
+            else:
+                d = next_weekday(today, idx, inclusive=False)
+            return d.isoformat()
+        return w
+
+    raw = re.sub(
+        r"\b(today|tomorrow|(?:this|next)\s+(?:mon|tue|tues|wed|thu|thur|thurs|fri|sat|sun))\b",
+        replace_relative, raw, flags=re.I
+    )
+
+    # Use normalized prompt hereafter
+    prompt = raw
+
+    # time: range? single+duration? default 09:00–10:00
     tr = parse_time_range(prompt)
     s_h = s_m = e_h = e_m = None
     if tr:
@@ -359,21 +380,16 @@ async def parse_prompt(payload: dict):
         one = parse_single_time_and_duration(prompt)
         if one:
             s_h, s_m, dur = one
-            # compute end from duration
             end_dt = datetime(2000, 1, 1, s_h, s_m) + timedelta(minutes=dur)
             e_h, e_m = end_dt.hour, end_dt.minute
         else:
             s_h, s_m, e_h, e_m = (9, 0, 10, 0)
 
-    # 2) repeat days and cadence
-    repeat_days = parse_repeat(prompt)                 # e.g., [1,3,5]
-    every_weeks = parse_every_weeks(prompt)            # e.g., 2 for biweekly
-    for_weeks   = parse_for_weeks(prompt)              # e.g., 8
+    repeat_days = parse_repeat(prompt)
+    every_weeks = parse_every_weeks(prompt)
+    for_weeks   = parse_for_weeks(prompt)
+    until_d     = parse_until_date(prompt, tz)
 
-    # 3) until (explicit)
-    until_d = parse_until_date(prompt, tz)
-
-    # 4) base date
     explicit_date = None
     try:
         if DATE_TOKEN_RE.search(prompt):
@@ -385,20 +401,15 @@ async def parse_prompt(payload: dict):
     today_local = datetime.now(tz).date()
     base_date = explicit_date or today_local
 
-    # If biweekly/every N weeks but no explicit days, use the base weekday
     if every_weeks and not repeat_days:
-        # Python weekday(): Mon=0..Sun=6  → JS/our map: Sun=0..Sat=6
-        js_dow = (base_date.weekday() + 1) % 7
+        js_dow = (base_date.weekday() + 1) % 7  # map Mon=0..Sun=6 → Sun=0..Sat=6
         repeat_days = [js_dow]
 
-    # If “for N weeks” provided and no explicit until, compute it from base_date
     if for_weeks and not until_d:
         until_d = base_date + timedelta(weeks=for_weeks)
 
-    # 5) title
     title = scrub_title(prompt)
 
-    # 6) build start/end ISO (UTC) from local
     start_local = datetime(base_date.year, base_date.month, base_date.day, s_h, s_m, 0)
     end_local   = datetime(base_date.year, base_date.month, base_date.day, e_h, e_m, 0)
     if end_local <= start_local:
@@ -418,12 +429,9 @@ async def parse_prompt(payload: dict):
     return out
 
 # ───────────────────────── Suggest next free slot ───────────────────
+
 @app.get("/suggest")
 def suggest_next_free(start: str, end: str, db: Session = Depends(get_db)):
-    """
-    Query params: start, end (ISO strings, usually UTC 'Z')
-    Returns: {"start": ISO, "end": ISO} with the next non-overlapping window.
-    """
     try:
         s = iso_parse(start)
         e = iso_parse(end)
@@ -441,17 +449,24 @@ def suggest_next_free(start: str, end: str, db: Session = Depends(get_db)):
         ).first()
         if not conflict:
             return {
-                "start": s.isoformat().replace("+00:00", "Z"),
-                "end": (s + duration).isoformat().replace("+00:00", "Z"),
+                "start": s.astimezone(timezone.utc).isoformat().replace("+00:00", "Z"),
+                "end":   (s + duration).astimezone(timezone.utc).isoformat().replace("+00:00", "Z"),
             }
-        # Move start to the end of the conflicting event
         s = max(s, conflict.end)
 
-# ───────────────────────── Events CRUD ──────────────────────────────
+# ───────────────────────── Events CRUD & list (range) ───────────────
 
 @app.get("/events", response_model=list[EventOut])
-def list_events(db: Session = Depends(get_db)):
-    return db.scalars(select(Event)).all()
+def list_events(
+    start: Optional[datetime] = Query(default=None),
+    end:   Optional[datetime] = Query(default=None),
+    db: Session = Depends(get_db),
+):
+    q = select(Event)
+    if start and end:
+        # overlap condition: start < end && end > start
+        q = q.where(and_(Event.start < end, Event.end > start))
+    return db.scalars(q).all()
 
 @app.post("/events", response_model=EventOut, status_code=201)
 def create_event(data: EventIn, db: Session = Depends(get_db)):
@@ -520,60 +535,41 @@ def delete_event(event_id: int, db: Session = Depends(get_db)):
     db.delete(event)
     db.commit()
 
-'''
-| Concept                    | What It Does                                                                                                        |
-| -------------------------- | ------------------------------------------------------------------------------------------------------------------- |
-| `FastAPI()`                | Creates the app — API brain.                                                                           |
-| `@app.on_event("startup")` | Runs once when the server starts. builds the `events` table using `Base.metadata`.                          |
-| `@app.get("/health")`      | A simple check to make sure the API is alive and running. Returns `{"status": "ok"}`.                               |
-| `@app.get("/events")`      | Responds to GET requests from the frontend. Grabs all `Event` rows from the database and sends them back as JSON.   |
-| `@app.post("/events")`     | Responds to POST requests. Takes in a JSON event, validates it, adds it to the database, and returns it with an ID. |
-| `Depends(get_db)`          | Tells FastAPI: “Give this route a fresh database connection, and close it afterward.”                               |
-| `response_model=...`       | Makes sure your API returns clean, well-shaped JSON that matches your schema (`EventOut`).                          |
+# ───────────────────────── ICS export ───────────────────────────────
 
-'''
+def _ics_dt(dt: datetime) -> str:
+    return dt.astimezone(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
 
+@app.get("/events.ics")
+def export_ics(
+    start: Optional[datetime] = Query(default=None),
+    end:   Optional[datetime] = Query(default=None),
+    db: Session = Depends(get_db),
+):
+    q = select(Event)
+    if start and end:
+        q = q.where(and_(Event.start < end, Event.end > start))
+    rows = db.scalars(q).all()
 
-
-
-'''
-backend route, sits on server waiting for GET request to /events. request comes from React frontend. 
-When react code runs, send get request here.
-Receving get request, sends from database. 
-response_model = list[EventOUT] means return value shuold be list EventOut objects, defined by schemas.oy
-db: Session = Depends(get_db) means FASTAPI will run get_db() and give result to this func as db
-select(Event) = Give all rows from events table, like writing SELECT * FROM events in SQL
-db.scalars(...).all() - Execute that query, return that into a Python list of event objects
-FastAPI autoconverst into JSON
-sends back to frontend
-events are stored in SQLite database file on server
-
-
-[
-  {
-    "id": 1,
-    "title": "Dentist",
-    "start": "2025-08-01T09:00:00",
-    "end": "2025-08-01T10:00:00"
-  },
-  ...
-]
-
-
-The website requests the events, 
-events live in database
-backend is middle layer speaks to db and internet
-
-React code runs and sends
-fetch("https://your-url-8000.app.github.dev/events")
-
-'''
-
-
-''' 
-import Fast API to create web routes (GET/POST)
-Depends: handles dependency injection, auto plugging in database when necessary
-Get a database session for each request
-select from database table, makes queries like SELECT * FROM events
-in a clean way
-'''
+    lines = [
+        "BEGIN:VCALENDAR",
+        "VERSION:2.0",
+        "PRODID:-//Cal//Dasha//EN",
+    ]
+    now_utc = datetime.now(timezone.utc)
+    for e in rows:
+        lines += [
+            "BEGIN:VEVENT",
+            f"UID:cal-{e.id}@local",
+            f"DTSTAMP:{_ics_dt(now_utc)}",
+            f"DTSTART:{_ics_dt(e.start)}",
+            f"DTEND:{_ics_dt(e.end)}",
+            f"SUMMARY:{(e.title or '').replace('\\n',' ')}",
+            *( [f"LOCATION:{e.location}"] if getattr(e, 'location', None) else [] ),
+            f"DESCRIPTION:{(getattr(e, 'description', '') or '').replace('\\n','\\n ')}",
+            "END:VEVENT",
+        ]
+    lines.append("END:VCALENDAR")
+    ics = "\r\n".join(lines) + "\r\n"
+    from fastapi.responses import Response
+    return Response(content=ics, media_type="text/calendar")

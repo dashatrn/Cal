@@ -1,25 +1,43 @@
+# backend/app/schemas.py
+from __future__ import annotations
 from datetime import datetime
-#^needed for start and end
+from typing import Optional
 from pydantic import BaseModel, Field
 
-
-# defines what data comes in an out of api
-#for requests, when someone send post to add a new event
 class EventIn(BaseModel):
     title: str = Field(..., max_length=200)
     start: datetime
     end:   datetime
+    # NEW:
+    description: Optional[str] = Field(default=None, max_length=2000)
+    location:    Optional[str] = Field(default=None, max_length=255)
+
+class EventOut(EventIn):
+    id: int
 
 #for responses, what fastapi will return back when event
 #created or fetched
 #include the id, which DB assigns automatically
 
-class EventOut(EventIn):
-    id: int
-    model_config = {"from_attributes": True}
 
 
     '''
+# backend/app/schemas.py
+from __future__ import annotations
+from datetime import datetime
+from typing import Optional
+from pydantic import BaseModel, Field
+
+class EventIn(BaseModel):
+    title: str = Field(..., max_length=200)
+    start: datetime
+    end:   datetime
+    # NEW:
+    description: Optional[str] = Field(default=None, max_length=2000)
+    location:    Optional[str] = Field(default=None, max_length=255)
+
+class EventOut(EventIn):
+    id: int
 
     “Hey FastAPI, when someone calls my API, I want to validate and return JSON that looks like this:”
     {

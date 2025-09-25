@@ -35,8 +35,9 @@ export default function App() {
   const gotoNext  = () => calRef.current?.getApi().next();
   const gotoToday = () => calRef.current?.getApi().today();
 
-  const reload = () =>
-    listEvents()
+  // UPDATED: accept optional range (works even if backend ignores params)
+  const reload = (start?: string, end?: string) =>
+    listEvents(start, end)
       .then((api) => setEvents(api.map((e) => ({ ...e, id: e.id.toString() }))))
       .catch(console.error);
 
@@ -83,37 +84,35 @@ export default function App() {
     reload();
     setModalInit(null);
   };
-// BEFORE
-// const handleNewSubmit = (p: Partial<EventIn> & { thumb?: string; repeatDays?: number[]; repeatUntil?: string }) => {
 
-// AFTER
-const handleNewSubmit = (
-  p: Partial<EventIn> & {
-    thumb?: string;
-    repeatDays?: number[];
-    repeatUntil?: string;        // ← stays a STRING in YYYY-MM-DD (local date)
-    repeatEveryWeeks?: number;   // ← new optional number (e.g., 2 for biweekly)
-  }
-) => {
-  const now = new Date();
-  const defStart = new Date(now); defStart.setMinutes(0,0,0);
-  const defEnd   = new Date(defStart); defEnd.setHours(defStart.getHours() + 1);
+  const handleNewSubmit = (
+    p: Partial<EventIn> & {
+      thumb?: string;
+      repeatDays?: number[];
+      repeatUntil?: string;        // ← stays a STRING in YYYY-MM-DD (local date)
+      repeatEveryWeeks?: number;   // ← new optional number (e.g., 2 for biweekly)
+    }
+  ) => {
+    const now = new Date();
+    const defStart = new Date(now); defStart.setMinutes(0,0,0);
+    const defEnd   = new Date(defStart); defEnd.setHours(defStart.getHours() + 1);
 
-  const initial: ApiEvent = {
-    id: 0,
-    title: p.title ?? "",
-    start: p.start ?? defStart.toISOString().slice(0,19),
-    end:   p.end   ?? defEnd.toISOString().slice(0,19),
-  } as any;
+    const initial: ApiEvent = {
+      id: 0,
+      title: p.title ?? "",
+      start: p.start ?? defStart.toISOString().slice(0,19),
+      end:   p.end   ?? defEnd.toISOString().slice(0,19),
+    } as any;
 
-  (initial as any).thumb = p.thumb;
-  (initial as any).repeatDays = p.repeatDays;
-  (initial as any).repeatUntil = p.repeatUntil;
-  (initial as any).repeatEveryWeeks = p.repeatEveryWeeks;  // ← add this
+    (initial as any).thumb = p.thumb;
+    (initial as any).repeatDays = p.repeatDays;
+    (initial as any).repeatUntil = p.repeatUntil;
+    (initial as any).repeatEveryWeeks = p.repeatEveryWeeks;  // ← add this
 
-  setModalInit(initial);
-  setShowNew(false);
-};
+    setModalInit(initial);
+    setShowNew(false);
+  };
+
   const CAL_HEIGHT = Math.max(320, vh - HEADER_H - TOOLBAR_H - EXTRA_PAD);
 
   return (
@@ -179,6 +178,11 @@ const handleNewSubmit = (
               localStorage.setItem(LS_VIEW, arg.view.type);
               const current = calRef.current?.getApi().getDate();
               if (current) localStorage.setItem(LS_DATE, current.toISOString());
+
+              // NEW: fetch only visible range (safe even if backend ignores)
+              const startStr = arg.startStr; // ISO
+              const endStr   = arg.endStr;   // ISO (exclusive)
+              reload(startStr, endStr);
             }}
           />
         </main>

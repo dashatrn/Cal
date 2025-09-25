@@ -19,16 +19,26 @@ export interface EventIn  { title: string; start: string; end: string }
 export interface EventOut extends EventIn { id: number }
 
 // Calendar CRUD
-export const listEvents  = ()                      => api.get <EventOut[]>("/events").then(r => r.data);
-export const createEvent = (e: EventIn)            => api.post<EventOut> ("/events",        e).then(r => r.data);
-export const updateEvent = (id: number, e: EventIn)=> api.put <EventOut> (`/events/${id}`,  e).then(r => r.data);
-export const deleteEvent = (id: number)            => api.delete        (`/events/${id}`);
+// NOTE: start/end are optional and safe to send even if the backend ignores them.
+export const listEvents  = (start?: string, end?: string) =>
+  api.get<EventOut[]>("/events", {
+    params: (start && end) ? { start, end } : undefined,
+  }).then(r => r.data);
+
+export const createEvent = (e: EventIn)             =>
+  api.post<EventOut> ("/events",        e).then(r => r.data);
+
+export const updateEvent = (id: number, e: EventIn) =>
+  api.put <EventOut> (`/events/${id}`,  e).then(r => r.data);
+
+export const deleteEvent = (id: number)             =>
+  api.delete        (`/events/${id}`);
 
 // Parsed fields returned from /uploads and /parse
 export type ParsedFields = Partial<EventIn> & {
   thumb?: string;
   repeatDays?: number[];
-  repeatUntil?: string;     // YYYY-MM-DD (local)
+  repeatUntil?: string;      // YYYY-MM-DD (local)
   repeatEveryWeeks?: number; // ← NEW
 };
 
