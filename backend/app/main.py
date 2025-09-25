@@ -250,6 +250,22 @@ def build_iso(dt_local: datetime, tz: ZoneInfo) -> str:
     dt_local = dt_local.replace(tzinfo=tz)
     return dt_local.astimezone(ZoneInfo("UTC")).isoformat().replace("+00:00", "Z")
 
+# --- run migrations on startup (Render-friendly) ---
+import os
+from alembic import command
+from alembic.config import Config
+
+def run_migrations():
+    here = os.path.dirname(__file__)
+    alembic_ini = os.path.join(here, "..", "alembic.ini")          # ../alembic.ini
+    migrations = os.path.join(here, "migrations")                   # app/migrations
+    cfg = Config(alembic_ini)
+    cfg.set_main_option("script_location", migrations)
+    command.upgrade(cfg, "head")
+
+@app.on_event("startup")
+def _startup():
+    run_migrations()
 # ───────────────────────── Lifecycle & health ───────────────────────
 
 @app.on_event("startup")
