@@ -256,20 +256,32 @@ import os
 from pathlib import Path
 from alembic import command
 from alembic.config import Config
+from sqlalchemy import inspect, text
 
+# ---- run alembic if possible
 def run_migrations() -> None:
-    # repo layout: backend/
-    here = Path(__file__).resolve().parents[1]  # /workspaces/Cal/backend
+    here = Path(__file__).resolve().parents[1]  # /app/backend
     cfg = Config(str(here / "alembic.ini"))
-    # point alembic at the migrations folder
     cfg.set_main_option("script_location", str(here / "app" / "migrations"))
-    # inject DB URL from env so we don't hardcode it in alembic.ini
     if "DATABASE_URL" in os.environ:
         cfg.set_main_option("sqlalchemy.url", os.environ["DATABASE_URL"])
+    # this no-ops if there are no (visible) migrations
     command.upgrade(cfg, "head")
+
+# ---- harden against missing columns (safe to run repeatedly)
+def ensure_event_columns(engine) -> None:
+    with engine.begin() as conn:
+        insp = inspect(conn)
+        cols = {c["name"] for c in insp.get_columns("events")}
+        if "description" not in cols:
+            conn.exec_driver_sql("ALTER TABLE events ADD COLUMN IF NOT EXISTS description TEXT")
+        if "location" not in cols:
+            conn.exec_driver_sql("ALTER TABLE events ADD COLUMN IF NOT EXISTS location TEXT")
+
 @app.on_event("startup")
 def _startup():
     run_migrations()
+    ensure_event_columns(engine)
 # ───────────────────────── Lifecycle & health ───────────────────────
 
 @app.on_event("startup")
