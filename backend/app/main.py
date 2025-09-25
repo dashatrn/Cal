@@ -251,18 +251,22 @@ def build_iso(dt_local: datetime, tz: ZoneInfo) -> str:
     return dt_local.astimezone(ZoneInfo("UTC")).isoformat().replace("+00:00", "Z")
 
 # --- run migrations on startup (Render-friendly) ---
+# --- add near the top ---
 import os
+from pathlib import Path
 from alembic import command
 from alembic.config import Config
 
-def run_migrations():
-    here = os.path.dirname(__file__)
-    alembic_ini = os.path.join(here, "..", "alembic.ini")          # ../alembic.ini
-    migrations = os.path.join(here, "migrations")                   # app/migrations
-    cfg = Config(alembic_ini)
-    cfg.set_main_option("script_location", migrations)
+def run_migrations() -> None:
+    # repo layout: backend/
+    here = Path(__file__).resolve().parents[1]  # /workspaces/Cal/backend
+    cfg = Config(str(here / "alembic.ini"))
+    # point alembic at the migrations folder
+    cfg.set_main_option("script_location", str(here / "app" / "migrations"))
+    # inject DB URL from env so we don't hardcode it in alembic.ini
+    if "DATABASE_URL" in os.environ:
+        cfg.set_main_option("sqlalchemy.url", os.environ["DATABASE_URL"])
     command.upgrade(cfg, "head")
-
 @app.on_event("startup")
 def _startup():
     run_migrations()
