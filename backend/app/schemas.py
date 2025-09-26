@@ -1,24 +1,19 @@
-# backend/app/schemas.py
 from __future__ import annotations
-from datetime import datetime
 from typing import Optional
-from pydantic import BaseModel, Field
+from datetime import datetime
+from pydantic import BaseModel, ConfigDict
 
 class EventIn(BaseModel):
-    title: str = Field(..., max_length=200)
-    start: datetime
+    title: str
+    start: datetime  # UTC ISO string in/out
     end:   datetime
-    # NEW:
-    description: Optional[str] = Field(default=None, max_length=2000)
-    location:    Optional[str] = Field(default=None, max_length=255)
+    description: Optional[str] = None
+    location:    Optional[str] = None
 
 class EventOut(EventIn):
     id: int
-    model_config = {"from_attributes": True}  # ➜ Add this line to enable ORM serialization
-
-#for responses, what fastapi will return back when event
-#created or fetched
-#include the id, which DB assigns automatically
+    # allow creating Pydantic models from ORM rows
+    model_config = ConfigDict(from_attributes=True)
 
 
 
