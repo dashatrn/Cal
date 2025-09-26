@@ -14,6 +14,7 @@ class EventIn(BaseModel):
 
 class EventOut(EventIn):
     id: int
+    model_config = {"from_attributes": True}  # ➜ Add this line to enable ORM serialization
 
 #for responses, what fastapi will return back when event
 #created or fetched
