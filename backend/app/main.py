@@ -1,24 +1,21 @@
-# backend/app/main.py
 from datetime import datetime, date, timedelta, timezone
 from typing import Optional
+from pathlib import Path
+import os
+import re
+import tempfile
+import uuid
 
 from fastapi import FastAPI, Depends, HTTPException, status, UploadFile, File, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy.orm import Session
-from sqlalchemy import select, and_
-
-from pathlib import Path
-import uuid
-import tempfile
-import re
-from os import getenv
-
+from sqlalchemy import select, and_, inspect
 from dateutil import parser as dtparse
 from dateutil.parser import isoparse as iso_parse
+from zoneinfo import ZoneInfo
 import pytesseract
 from PIL import Image
-from zoneinfo import ZoneInfo
 
 # ── local modules ───────────────────────────────────────────────────
 from .db import Base, engine, get_db
@@ -29,16 +26,15 @@ from .schemas import EventIn, EventOut
 app = FastAPI(title="Cal API")
 
 # ───────────────────────── CORS ─────────────────────────────────────
-frontend_origin = getenv("FRONTEND_ORIGIN")
-codespaces_origin = getenv("CODESPACES_FRONTEND")
+frontend_origin = os.getenv("FRONTEND_ORIGIN")
+codespaces_origin = os.getenv("CODESPACES_FRONTEND")
 
 origins: list[str] = []
 if frontend_origin:
     origins.append(frontend_origin)
 if codespaces_origin:
     origins.append(codespaces_origin)
-if not origins:
-    # dev-friendly; set FRONTEND_ORIGIN in prod to lock down
+if not origins:  # dev-friendly default
     origins = ["*"]
 
 app.add_middleware(
@@ -58,17 +54,16 @@ app.mount("/uploads", StaticFiles(directory=UPLOAD_DIR), name="uploads")
 def ocr_to_text(data: bytes) -> str:
     with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp:
         tmp.write(data)
+        tmp_path = tmp.name
     try:
-        text = pytesseract.image_to_string(Image.open(tmp.name))
-        return text
+        return pytesseract.image_to_string(Image.open(tmp_path))
     finally:
         try:
-            Path(tmp.name).unlink(missing_ok=True)
+            Path(tmp_path).unlink(missing_ok=True)
         except Exception:
             pass
 
-# ───────────────────────── Helpers: prompt parsing ──────────────────
-# day name → 0..6 (Sunday=0 to match JS Date.getDay)
+# ───────────────────────── Helpers: parsing ─────────────────────────
 DOW_MAP = {
     "sunday": 0, "sun": 0,
     "monday": 1, "mon": 1,
@@ -82,29 +77,19 @@ DOW_MAP = {
 TIME_RANGE_RE = re.compile(r"""
     (?P<s_h>\d{1,2})
     (?::(?P<s_m>\d{2}))?
-    \s*(?P<s_ampm>[ap]m)?          # optional am/pm for start
+    \s*(?P<s_ampm>[ap]m)?
     \s*(?:-|–|—|to)\s*
     (?P<e_h>\d{1,2})
     (?::(?P<e_m>\d{2}))?
-    \s*(?P<e_ampm>[ap]m)?          # optional am/pm for end
+    \s*(?P<e_ampm>[ap]m)?
 """, re.IGNORECASE | re.VERBOSE)
 
-TIME_SINGLE_RE = re.compile(
-    r"\b(?P<h>\d{1,2})(?::(?P<m>\d{2}))?\s*(?P<ampm>[ap]m)?\b",
-    re.IGNORECASE
-)
-DURATION_RE = re.compile(
-    r"\bfor\s+(?:(?P<h>\d+)\s*(?:hours?|hrs?|h))?\s*(?:(?P<m>\d+)\s*(?:minutes?|mins?|m))?\b",
-    re.IGNORECASE
-)
-UNTIL_RE = re.compile(
-    r"\buntil\s+(?P<date>(?:\d{1,2}/\d{1,2}(?:/\d{2,4})?"
-    r"|(?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)\w*\s+\d{1,2}(?:,\s*\d{4})?))",
-    re.IGNORECASE
-)
+TIME_SINGLE_RE = re.compile(r"\b(?P<h>\d{1,2})(?::(?P<m>\d{2}))?\s*(?P<ampm>[ap]m)?\b", re.IGNORECASE)
+DURATION_RE = re.compile(r"\bfor\s+(?:(?P<h>\d+)\s*(?:hours?|hrs?|h))?\s*(?:(?P<m>\d+)\s*(?:minutes?|mins?|m))?\b", re.IGNORECASE)
+UNTIL_RE    = re.compile(r"\buntil\s+(?P<date>(?:\d{1,2}/\d{1,2}(?:/\d{2,4})?|(?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)\w*\s+\d{1,2}(?:,\s*\d{4})?))", re.IGNORECASE)
 DAYS_LIST_RE = re.compile(r"""
     \b
-    (?:(?:every|on)\s+)?                                  # optional prefix
+    (?:(?:every|on)\s+)?                                  
     (?P<days>
       (?:
         mon|monday|tue|tues|tuesday|wed|weds|wednesday|
@@ -119,61 +104,41 @@ DAYS_LIST_RE = re.compile(r"""
     )
     \b
 """, re.IGNORECASE | re.VERBOSE)
-DATE_TOKEN_RE = re.compile(
-    r"\b(?:\d{1,2}/\d{1,2}(?:/\d{2,4})?"
-    r"|(?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)\w*\s+\d{1,2})\b",
-    re.IGNORECASE
-)
-EVERY_WEEKS_RE = re.compile(
-    r"\b(?:biweekly|every\s+other\s+week|every\s+(?P<n>\d+)\s+weeks?)\b",
-    re.IGNORECASE
-)
-FOR_WEEKS_RE = re.compile(
-    r"\bfor\s+(?P<n>\d+)\s+weeks?\b",
-    re.IGNORECASE
-)
+DATE_TOKEN_RE   = re.compile(r"\b(?:\d{1,2}/\d{1,2}(?:/\d{2,4})?|(?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)\w*\s+\d{1,2})\b", re.IGNORECASE)
+EVERY_WEEKS_RE  = re.compile(r"\b(?:biweekly|every\s+other\s+week|every\s+(?P<n>\d+)\s+weeks?)\b", re.IGNORECASE)
+FOR_WEEKS_RE    = re.compile(r"\bfor\s+(?P<n>\d+)\s+weeks?\b", re.IGNORECASE)
 
-def to_24h(h: int, m: int, ampm: Optional[str]) -> tuple[int, int]:
+def to_24h(h: int, m: int, ampm: Optional[str]) -> tuple[int,int]:
     if ampm:
         ampm = ampm.lower()
-        if ampm == "pm" and h != 12:
-            h += 12
-        if ampm == "am" and h == 12:
-            h = 0
+        if ampm == "pm" and h != 12: h += 12
+        if ampm == "am" and h == 12: h = 0
     return h, m
 
 def parse_time_range(text: str):
     m = TIME_RANGE_RE.search(text)
-    if not m:
-        return None
+    if not m: return None
     s_h = int(m.group("s_h")); s_m = int(m.group("s_m") or 0)
     e_h = int(m.group("e_h")); e_m = int(m.group("e_m") or 0)
     s_h, s_m = to_24h(s_h, s_m, m.group("s_ampm"))
     e_h, e_m = to_24h(e_h, e_m, m.group("e_ampm"))
     return (s_h, s_m, e_h, e_m)
 
-def parse_single_time_and_duration(text: str) -> Optional[tuple[int, int, int]]:
+def parse_single_time_and_duration(text: str) -> Optional[tuple[int,int,int]]:
     tm = TIME_SINGLE_RE.search(text)
-    if not tm:
-        return None
-    h = int(tm.group("h"))
-    m = int(tm.group("m") or 0)
+    if not tm: return None
+    h = int(tm.group("h")); m = int(tm.group("m") or 0)
     h, m = to_24h(h, m, tm.group("ampm"))
-
     dm = DURATION_RE.search(text)
-    if not dm:
-        return None
-    dh = int(dm.group("h") or 0)
-    dm_ = int(dm.group("m") or 0)
-    duration = dh * 60 + dm_
-    if duration <= 0:
-        duration = 60
+    if not dm: return None
+    dh = int(dm.group("h") or 0); dm_ = int(dm.group("m") or 0)
+    duration = dh*60 + dm_
+    if duration <= 0: duration = 60
     return (h, m, duration)
 
 def parse_until_date(text: str, tz: ZoneInfo) -> Optional[date]:
     m = UNTIL_RE.search(text)
-    if not m:
-        return None
+    if not m: return None
     raw = m.group("date")
     try:
         dt = dtparse.parse(raw, fuzzy=True, default=datetime.now(tz))
@@ -187,8 +152,7 @@ def parse_until_date(text: str, tz: ZoneInfo) -> Optional[date]:
 
 def parse_days_list(text: str) -> Optional[list[int]]:
     m = DAYS_LIST_RE.search(text)
-    if not m:
-        return None
+    if not m: return None
     raw = m.group("days")
     parts = re.split(r"[/,]\s*", raw)
     out: list[int] = []
@@ -205,35 +169,24 @@ def parse_days_list(text: str) -> Optional[list[int]]:
 
 def parse_repeat(text: str) -> Optional[list[int]]:
     t = text.lower()
-    if "every weekday" in t or "weekdays" in t:
-        return [1,2,3,4,5]
-    if "every day" in t or "everyday" in t or "daily" in t:
-        return [0,1,2,3,4,5,6]
+    if "every weekday" in t or "weekdays" in t: return [1,2,3,4,5]
+    if "every day" in t or "everyday" in t or "daily" in t: return [0,1,2,3,4,5,6]
     dl = parse_days_list(text)
-    if dl:
-        return dl
-    return None
+    return dl or None
 
 def parse_every_weeks(text: str) -> Optional[int]:
     m = EVERY_WEEKS_RE.search(text)
-    if not m:
-        return None
+    if not m: return None
     if m.group("n"):
-        try:
-            n = int(m.group("n"))
-            return max(1, n)
-        except Exception:
-            return 2
+        try: return max(1, int(m.group("n")))
+        except Exception: return 2
     return 2
 
 def parse_for_weeks(text: str) -> Optional[int]:
     m = FOR_WEEKS_RE.search(text)
-    if not m:
-        return None
-    try:
-        return max(1, int(m.group("n")))
-    except Exception:
-        return None
+    if not m: return None
+    try: return max(1, int(m.group("n")))
+    except Exception: return None
 
 def scrub_title(text: str) -> str:
     t = UNTIL_RE.sub("", text)
@@ -241,7 +194,7 @@ def scrub_title(text: str) -> str:
     t = EVERY_WEEKS_RE.sub("", t)
     t = DURATION_RE.sub("", t)
     t = TIME_RANGE_RE.sub("", t)
-    t = re.sub(r"\b(daily|every\s+day|everyday|every\s+weekday|weekday|weekdays)\b", "", t, flags=re.IGNORECASE)
+    t = re.sub(r"\b(daily|every\s+day|everyday|every\s+weekday|weekday|weekdays)\b", "", t, flags=re.I)
     t = DAYS_LIST_RE.sub("", t)
     t = re.sub(r"\s{2,}", " ", t).strip(" ,.-\n\t")
     return (t or "Untitled").strip()
@@ -250,44 +203,41 @@ def build_iso(dt_local: datetime, tz: ZoneInfo) -> str:
     dt_local = dt_local.replace(tzinfo=tz)
     return dt_local.astimezone(ZoneInfo("UTC")).isoformat().replace("+00:00", "Z")
 
-# --- run migrations on startup (Render-friendly) ---
-# --- add near the top ---
-import os
-from pathlib import Path
+# ───────────────────────── DB migrations (optional) ─────────────────
 from alembic import command
 from alembic.config import Config
-from sqlalchemy import inspect, text
 
-# ---- run alembic if possible
 def run_migrations() -> None:
-    here = Path(__file__).resolve().parents[1]  # /app/backend
-    cfg = Config(str(here / "alembic.ini"))
-    cfg.set_main_option("script_location", str(here / "app" / "migrations"))
+    """Run Alembic migrations using app-local alembic.ini."""
+    app_dir = Path(__file__).resolve().parent            # .../backend/app
+    cfg = Config(str(app_dir / "alembic.ini"))
+    cfg.set_main_option("script_location", str(app_dir / "migrations"))
+    # If DATABASE_URL is set, use it; otherwise env/ini will take over
     if "DATABASE_URL" in os.environ:
         cfg.set_main_option("sqlalchemy.url", os.environ["DATABASE_URL"])
-    # this no-ops if there are no (visible) migrations
     command.upgrade(cfg, "head")
 
-# ---- harden against missing columns (safe to run repeatedly)
 def ensure_event_columns(engine) -> None:
+    """Best-effort no-op if table missing; safe on Postgres/SQLite."""
     with engine.begin() as conn:
         insp = inspect(conn)
-        cols = {c["name"] for c in insp.get_columns("events")}
+        try:
+            cols = {c["name"] for c in insp.get_columns("events")}
+        except Exception:
+            return  # table not present yet; migrations should handle it
         if "description" not in cols:
             conn.exec_driver_sql("ALTER TABLE events ADD COLUMN IF NOT EXISTS description TEXT")
         if "location" not in cols:
             conn.exec_driver_sql("ALTER TABLE events ADD COLUMN IF NOT EXISTS location TEXT")
 
 @app.on_event("startup")
-def _startup():
-    run_migrations()
-    ensure_event_columns(engine)
+def on_startup():
+    # Only run schema work if explicitly enabled
+    if os.getenv("AUTO_MIGRATE") == "1":
+        run_migrations()
+        ensure_event_columns(engine)
+
 # ───────────────────────── Lifecycle & health ───────────────────────
-
-@app.on_event("startup")
-def init_db() -> None:
-    Base.metadata.create_all(bind=engine)
-
 @app.get("/health")
 def health_check():
     return {"status": "ok"}
@@ -297,7 +247,6 @@ def read_root():
     return {"message": "FastAPI backend is running."}
 
 # ───────────────────────── Uploads → OCR ────────────────────────────
-
 @app.post("/uploads", status_code=201)
 async def upload_file(file: UploadFile = File(...)):
     raw = await file.read()
@@ -345,7 +294,6 @@ async def upload_file(file: UploadFile = File(...)):
     }
 
 # ───────────────────────── Parse prompt (TZ aware) ──────────────────
-
 @app.post("/parse")
 async def parse_prompt(payload: dict):
     """
@@ -363,7 +311,6 @@ async def parse_prompt(payload: dict):
     if not prompt:
         return {}
 
-    # Lightweight normalization: noon/midnight and relative dates.
     raw = prompt
     raw = re.sub(r"\bnoon\b", "12:00pm", raw, flags=re.I)
     raw = re.sub(r"\bmidnight\b", "12:00am", raw, flags=re.I)
@@ -400,10 +347,8 @@ async def parse_prompt(payload: dict):
         replace_relative, raw, flags=re.I
     )
 
-    # Use normalized prompt hereafter
     prompt = raw
 
-    # time: range? single+duration? default 09:00–10:00
     tr = parse_time_range(prompt)
     s_h = s_m = e_h = e_m = None
     if tr:
@@ -461,7 +406,6 @@ async def parse_prompt(payload: dict):
     return out
 
 # ───────────────────────── Suggest next free slot ───────────────────
-
 @app.get("/suggest")
 def suggest_next_free(start: str, end: str, db: Session = Depends(get_db)):
     try:
@@ -474,7 +418,6 @@ def suggest_next_free(start: str, end: str, db: Session = Depends(get_db)):
         e = s + timedelta(hours=1)
 
     duration = e - s
-
     while True:
         conflict = db.scalars(
             select(Event).where(and_(Event.start < s + duration, Event.end > s))
@@ -487,7 +430,6 @@ def suggest_next_free(start: str, end: str, db: Session = Depends(get_db)):
         s = max(s, conflict.end)
 
 # ───────────────────────── Events CRUD & list (range) ───────────────
-
 @app.get("/events", response_model=list[EventOut])
 def list_events(
     start: Optional[datetime] = Query(default=None),
@@ -496,17 +438,13 @@ def list_events(
 ):
     q = select(Event)
     if start and end:
-        # overlap condition: start < end && end > start
         q = q.where(and_(Event.start < end, Event.end > start))
     return db.scalars(q).all()
 
 @app.post("/events", response_model=EventOut, status_code=201)
 def create_event(data: EventIn, db: Session = Depends(get_db)):
     payload = data.model_dump()
-
-    overlap_stmt = select(Event).where(
-        and_(Event.start < payload["end"], Event.end > payload["start"])
-    )
+    overlap_stmt = select(Event).where(and_(Event.start < payload["end"], Event.end > payload["start"]))
     conflict = db.scalars(overlap_stmt).first()
     if conflict:
         raise HTTPException(
@@ -521,11 +459,8 @@ def create_event(data: EventIn, db: Session = Depends(get_db)):
                 }],
             },
         )
-
     evt = Event(**payload)
-    db.add(evt)
-    db.commit()
-    db.refresh(evt)
+    db.add(evt); db.commit(); db.refresh(evt)
     return evt
 
 @app.put("/events/{event_id}", response_model=EventOut)
@@ -547,16 +482,12 @@ def update_event(event_id: int, payload: EventIn, db: Session = Depends(get_db))
                 }],
             },
         )
-
     event = db.get(Event, event_id)
     if event is None:
         raise HTTPException(status_code=404, detail="Event not found")
-
     for field, value in payload.model_dump().items():
         setattr(event, field, value)
-
-    db.commit()
-    db.refresh(event)
+    db.commit(); db.refresh(event)
     return event
 
 @app.delete("/events/{event_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -564,11 +495,9 @@ def delete_event(event_id: int, db: Session = Depends(get_db)):
     event = db.get(Event, event_id)
     if event is None:
         raise HTTPException(status_code=404, detail="Event not found")
-    db.delete(event)
-    db.commit()
+    db.delete(event); db.commit()
 
 # ───────────────────────── ICS export ───────────────────────────────
-
 def _ics_dt(dt: datetime) -> str:
     return dt.astimezone(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
 
