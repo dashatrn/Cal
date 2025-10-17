@@ -4,6 +4,11 @@ import sys
 
 from sqlalchemy import engine_from_config, pool
 from alembic import context
+# backend/app/migrations/env.py
+from pathlib import Path
+ROOT = Path(__file__).resolve().parents[2]  # .../backend
+if str(ROOT) not in sys.path:
+    sys.path.append(str(ROOT))
 
 # Ensure "app" is importable when running alembic from project root
 sys.path.append(os.path.abspath(os.path.join(os.getcwd(), "app")))

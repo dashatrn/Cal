@@ -10,7 +10,6 @@ WORKDIR /app
 # ---------- Python deps ----------
 COPY requirements-api.txt .
 RUN pip install --no-cache-dir -r requirements-api.txt \
-RUN pip install --no-cache-dir -r requirements.txt \
     && rm -rf /root/.cache/pip          # throw away the wheel cache
 # ---------- project code ----------
 COPY . /app/backend
