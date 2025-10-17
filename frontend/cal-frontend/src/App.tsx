@@ -43,22 +43,26 @@ export default function App() {
   // range-aware reload (safe if backend ignores params)
   const reload = (start?: string, end?: string) =>
     listEvents(start, end)
-      .then((api) => setEvents(api.map((e) => ({ ...e, id: e.id.toString() }))))
-      .catch(console.error);
+      .then((api) => {
+        const evs = api.map((e) => ({ ...e, id: e.id.toString() }));
+        setEvents(evs);
+        return evs;
+      })
+      .catch((e) => { console.error(e); return []; });
+
+  
 
   // initial load + restore view/date
   useEffect(() => {
-    reload().then(() => {
+    reload().then((loaded) => {
       const api = calRef.current?.getApi();
       const savedView = localStorage.getItem(LS_VIEW) as any;
       const savedDate = localStorage.getItem(LS_DATE) as any;
       if (api) {
         if (savedView) api.changeView(savedView);
         if (savedDate) api.gotoDate(savedDate);
-        else {
-          const last = events.at(-1);
-          if (last) api.gotoDate(last.start);
-        }
+        else if (loaded.length) api.gotoDate(loaded[loaded.length - 1]!.start);
+
       }
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -84,7 +88,7 @@ export default function App() {
 
   const openEdit = (evt: ApiEvent) => setModalInit(evt);
 
-  const handleSaved = (e?: ApiEvent) => {
+  const handleSaved = (e: ApiEvent | undefined, _mode?: "create"|"update"|"delete") => {
     if (e) gotoDate(e.start);
     reload();
     setModalInit(null);

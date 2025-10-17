@@ -9,8 +9,7 @@ services:
     plan: free
     # Optional: if you want Render to use the Dockerfile's CMD, omit dockerCommand.
     # Your Dockerfile already starts uvicorn, so this line is not required.
-    dockerCommand: sh -c "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000"
-    envVars:
+    dockerCommand: sh -c "alembic -c app/alembic.ini upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000"    envVars:
       # Using your Neon connection string
       - key: DATABASE_URL
         value: "postgresql://neondb_owner:npg_PQmCIMV0dU8O@ep-plain-hall-ae269dp6-pooler.c-2.us-east-2.aws.neon.tech/neondb?sslmode=require&channel_binding=require"

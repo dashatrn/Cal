@@ -8,8 +8,12 @@ export default defineConfig({
     port: 5173,
     proxy: {
       // any path you call from React goes straight to FastAPI
-      '/events':  'http://backend:8000',
-      '/uploads': 'http://backend:8000',
+      '/events':    'http://backend:8000',
+      '/uploads':   'http://backend:8000',
+      '/parse':     'http://backend:8000',
+      '/suggest':   'http://backend:8000',
+      '/events.ics':'http://backend:8000',
+
     },
   },
 });

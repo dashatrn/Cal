@@ -1,15 +1,11 @@
 // src/api.ts
 import axios from "axios";
+// In production builds, this must be set by Render.
+const envURL = (import.meta.env.VITE_API_URL as string | undefined)?.replace(/\/+$/, "");
+// In dev, use the Vite proxy by default (relative URLs). If you prefer direct,
+// set VITE_API_URL in a .env.local.
+export const BASE_URL = envURL ?? "";
 
-// build-time value from .env  (works in production builds & PWAs)
-const envURL = import.meta.env.VITE_API_URL as string | undefined;
-
-// dev-time heuristic (when you’re on https://…-5173.app.github.dev)
-const devURL = `${window.location.protocol}//${window.location.hostname.replace("-5173", "-8000")}`;
-
-// final choice (strip trailing “/”)
-// final choice (strip trailing "/")
-export const BASE_URL = (envURL ?? devURL).replace(/\/+$/, "");
 
 export const api = axios.create({
   baseURL: BASE_URL,
@@ -25,8 +21,7 @@ export interface EventIn  {
   location?: string | null;
 }
 
-export interface EventOut extends EventIn { id: number }export interface EventOut extends EventIn { id: number }
-
+export interface EventOut extends EventIn { id: number }
 // Calendar CRUD
 // NOTE: start/end are optional and safe to send even if the backend ignores them.
 export const listEvents  = (start?: string, end?: string) =>

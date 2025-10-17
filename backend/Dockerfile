@@ -8,9 +8,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 WORKDIR /app
 
 # ---------- Python deps ----------
-COPY requirements.txt .
-ARG PIP_EXTRA_INDEX_URL=https://download.pytorch.org/whl/cpu
-
+COPY requirements-api.txt .
+RUN pip install --no-cache-dir -r requirements-api.txt \
 RUN pip install --no-cache-dir -r requirements.txt \
     && rm -rf /root/.cache/pip          # throw away the wheel cache
 # ---------- project code ----------
