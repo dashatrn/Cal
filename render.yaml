@@ -4,10 +4,18 @@ services:
     env: docker
     rootDir: backend
     plan: free
-    # No preDeployCommand, no startCommand, no dockerCommand here.
+
+    # 👇 add this to force the correct command
+    dockerCommand: >-
+      sh -lc 'python -m alembic -c app/alembic.ini upgrade head &&
+              uvicorn app.main:app --host 0.0.0.0 --port $PORT'
+
+    # optional but recommended:
+    healthCheckPath: /health
+
     envVars:
       - key: DATABASE_URL
-        value: "postgresql://neondb_owner:npg_PQmCIMV0dU8O@ep-plain-hall-ae269dp6-pooler.c-2.us-east-2.aws.neon.tech/neondb?sslmode=require&channel_binding=require"
+        value: "postgresql://neondb_owner:npg_PQmCIMV0dU8O@ep-plain-hall-ae269dp6-pooler.c-2.us-east-2.aws.neon.tech/neondb?sslmode=require"
       - key: FRONTEND_ORIGIN
         value: "https://cal-frontend.onrender.com"
       - key: PYTHONUNBUFFERED
@@ -16,7 +24,7 @@ services:
       name: uploads
       mountPath: /app/uploads
       sizeGB: 1
-  # ───────── Frontend (Static) ─────────
+
   - type: static
     name: cal-frontend
     rootDir: frontend/cal-frontend
