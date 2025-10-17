@@ -24,23 +24,27 @@ from .schemas import EventIn, EventOut
 # ────────────────────────────────────────────────────────────────────
 
 app = FastAPI(title="Cal API")
-
 # ───────────────────────── CORS ─────────────────────────────────────
-frontend_origin = os.getenv("FRONTEND_ORIGIN")
-codespaces_origin = os.getenv("CODESPACES_FRONTEND")
+def _split_origins(s: str | None) -> list[str]:
+    if not s:
+        return []
+    return [o.strip().rstrip("/") for o in s.split(",") if o.strip()]
 
-origins: list[str] = []
-if frontend_origin:
-    origins.append(frontend_origin)
-if codespaces_origin:
-    origins.append(codespaces_origin)
-if not origins:  # dev-friendly default
+# Primary allowed origin + any extras (comma-separated)
+frontend_origins = _split_origins(os.getenv("FRONTEND_ORIGIN"))
+extra_origins    = _split_origins(os.getenv("EXTRA_CORS_ORIGINS"))
+origins: list[str] = [*frontend_origins, *extra_origins]
+
+# If nothing provided, allow '*' for local/dev only
+allow_all = False
+if not origins:
     origins = ["*"]
+    allow_all = True
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
-    allow_credentials=True,
+    allow_credentials=not allow_all,  # credentials not allowed with '*'
     allow_methods=["*"],
     allow_headers=["*"],
 )

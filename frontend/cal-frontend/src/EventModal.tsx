@@ -3,7 +3,7 @@ import type { AxiosError } from "axios";
 import type { EventOut, EventIn } from "./api";
 import { createEvent, updateEvent, deleteEvent, suggestNext } from "./api";
 import { isoToLocalInput, localInputToISO, nowLocalInput } from "./datetime";
-
+import { BASE_URL } from "./api";
 interface Props {
   initial?: EventOut | null; // we’ll read optional extras via (initial as any)
   onClose(): void;
@@ -232,13 +232,18 @@ export default function EventModal({ initial, onClose, onSaved }: Props) {
         )}
 
         <div className="flex items-center space-x-3">
-          {initial && (initial as any).thumb && (
-            <img
-              src={(initial as any).thumb}
-              alt="upload preview"
-              className="w-12 h-12 object-cover rounded"
-            />
-          )}
+
+          {initial && (initial as any).thumb && (() => {
+            const t = (initial as any).thumb as string;
+            const src = t.startsWith("http") ? t : `${BASE_URL}${t}`;
+            return (
+              <img
+                src={src}
+                alt="upload preview"
+                className="w-12 h-12 object-cover rounded"
+              />
+            );
+          })()}
           <h2 className="text-xl font-semibold flex-1">
             {isEdit ? "Edit Event" : "New Event"}
           </h2>
