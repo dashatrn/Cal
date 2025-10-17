@@ -1,17 +1,26 @@
 // src/api.ts
 import axios from "axios";
 
-// Build-time env from Render
-const envURLRaw = import.meta.env.VITE_API_URL as string | undefined;
+// 1) Prefer Render's build-time env
+let BASE_URL = (import.meta.env.VITE_API_URL as string | undefined)?.replace(/\/+$/, "");
 
-// Fallback for safety (use your live pair)
-const fallbackURL =
-  typeof window !== "undefined" &&
-  window.location.origin === "https://cal-frontend-4k1s.onrender.com"
-    ? "https://cal-api-otk8.onrender.com"
-    : undefined;
+// 2) If missing (mis-built frontend), hard fallback to your live API
+if (!BASE_URL && typeof window !== "undefined") {
+  const here = window.location.origin.replace(/\/+$/, "");
+  if (here === "https://cal-frontend-4k1s.onrender.com") {
+    BASE_URL = "https://cal-api-otk8.onrender.com";
+  }
+}
 
-export const BASE_URL = (envURLRaw || fallbackURL || "").replace(/\/+$/, "");
+// 3) Final guard: fail loudly so you see it in the console instead of “ERR_NETWORK”
+if (!BASE_URL) {
+  console.error("[cal] VITE_API_URL is missing and no safe fallback matched. Set VITE_API_URL.");
+  // optional: throw or keep as "" — I recommend throw so you notice immediately:
+  // throw new Error("VITE_API_URL missing");
+  BASE_URL = ""; // keep if you prefer not to throw
+}
+
+export { BASE_URL };
 
 export const api = axios.create({
   baseURL: BASE_URL,

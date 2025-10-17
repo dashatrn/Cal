@@ -28,28 +28,21 @@ app = FastAPI(title="Cal API")
 # ───────────────────────── CORS ─────────────────────────────────────
 from fastapi.middleware.cors import CORSMiddleware
 
-def _split_origins(s: str | None) -> list[str]:
-    if not s:
-        return []
-    # split on comma, trim spaces, strip trailing slashes
-    return [o.strip().rstrip("/") for o in s.split(",") if o.strip()]
+def _clean(s: str | None) -> str | None:
+    return s.strip().rstrip("/") if s and s.strip() else None
 
-# Accept the exact static site origin from env,
-# plus anything on onrender.com (covers preview / redeploy URLs).
-frontend_origins = _split_origins(os.getenv("FRONTEND_ORIGIN"))
-extra_origins    = _split_origins(os.getenv("EXTRA_CORS_ORIGINS"))
-
-allow_list = [*frontend_origins, *extra_origins]
+# Prefer env from Render, but fall back to the known static URL
+_env_origin = _clean(os.getenv("FRONTEND_ORIGIN"))
+FRONTEND_ORIGIN = _env_origin or "https://cal-frontend-4k1s.onrender.com"
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=allow_list,                         # exact allow list (empty is fine)
-    allow_origin_regex=r"^https://([a-z0-9-]+\.)*onrender\.com$",  # allow any *.onrender.com
-    allow_credentials=False,                          # we don't use cookies
+    allow_origins=[FRONTEND_ORIGIN],   # explicit; no regex, no wildcard
+    allow_credentials=False,           # we don't use cookies
     allow_methods=["*"],
     allow_headers=["*"],
     expose_headers=["*"],
-    max_age=600,
+    max_age=86400,
 )
 
 # ───────────────────────── Static uploads ───────────────────────────
