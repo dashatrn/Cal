@@ -14,8 +14,7 @@ if str(ROOT) not in sys.path:
 sys.path.append(os.path.abspath(os.path.join(os.getcwd(), "app")))
 
 from app.models import Base
-from app.db import DB_URL as DEFAULT_DB_URL  # fallback if DATABASE_URL not set
-
+from app.db import DB_URL as DEFAULT_DB_URL, _normalize_db_url  # add _normalize_db_url
 # Alembic config object
 config = context.config
 
@@ -27,7 +26,7 @@ except Exception:
     pass
 
 # Configure DB URL for Alembic
-db_url = os.getenv("DATABASE_URL") or DEFAULT_DB_URL
+db_url = _normalize_db_url(os.getenv("DATABASE_URL") or DEFAULT_DB_URL)
 config.set_main_option("sqlalchemy.url", db_url)
 
 # Setup logging
