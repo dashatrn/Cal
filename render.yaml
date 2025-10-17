@@ -5,27 +5,15 @@ services:
     rootDir: backend
     plan: free
     healthCheckPath: /health
-
     envVars:
       - key: DATABASE_URL
-        value: "postgresql://neondb_owner:npg_PQmCIMV0dU8O@ep-plain-hall-ae269dp6-pooler.c-2.us-east-2.aws.neon.tech/neondb?sslmode=require"
-
-      # ← THIS must be your actual static site origin
+        value: "postgresql://neondb_owner:***@ep-plain-hall-ae269dp6-pooler.c-2.us-east-2.aws.neon.tech/neondb?sslmode=require"
       - key: FRONTEND_ORIGIN
         value: "https://cal-frontend-4k1s.onrender.com"
-
-      # Optional: comma-separate more allowed origins in the future
       - key: EXTRA_CORS_ORIGINS
-        value: ""
-
+        value: ""        # (optional)
       - key: PYTHONUNBUFFERED
         value: "1"
-
-    disk:
-      name: uploads
-      mountPath: /app/uploads
-      sizeGB: 1
-    
 
   - type: static
     name: cal-frontend

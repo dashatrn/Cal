@@ -24,29 +24,32 @@ from .schemas import EventIn, EventOut
 # ────────────────────────────────────────────────────────────────────
 
 app = FastAPI(title="Cal API")
+
 # ───────────────────────── CORS ─────────────────────────────────────
+from fastapi.middleware.cors import CORSMiddleware
+
 def _split_origins(s: str | None) -> list[str]:
     if not s:
         return []
+    # split on comma, trim spaces, strip trailing slashes
     return [o.strip().rstrip("/") for o in s.split(",") if o.strip()]
 
-# Primary allowed origin + any extras (comma-separated)
+# Accept the exact static site origin from env,
+# plus anything on onrender.com (covers preview / redeploy URLs).
 frontend_origins = _split_origins(os.getenv("FRONTEND_ORIGIN"))
 extra_origins    = _split_origins(os.getenv("EXTRA_CORS_ORIGINS"))
-origins: list[str] = [*frontend_origins, *extra_origins]
 
-# If nothing provided, allow '*' for local/dev only
-allow_all = False
-if not origins:
-    origins = ["*"]
-    allow_all = True
+allow_list = [*frontend_origins, *extra_origins]
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,
-    allow_credentials=not allow_all,  # credentials not allowed with '*'
+    allow_origins=allow_list,                         # exact allow list (empty is fine)
+    allow_origin_regex=r"^https://([a-z0-9-]+\.)*onrender\.com$",  # allow any *.onrender.com
+    allow_credentials=False,                          # we don't use cookies
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["*"],
+    max_age=600,
 )
 
 # ───────────────────────── Static uploads ───────────────────────────

@@ -1,11 +1,17 @@
 // src/api.ts
 import axios from "axios";
-// In production builds, this must be set by Render.
-const envURL = (import.meta.env.VITE_API_URL as string | undefined)?.replace(/\/+$/, "");
-// In dev, use the Vite proxy by default (relative URLs). If you prefer direct,
-// set VITE_API_URL in a .env.local.
-export const BASE_URL = envURL ?? "";
 
+// Build-time env from Render
+const envURLRaw = import.meta.env.VITE_API_URL as string | undefined;
+
+// Fallback for safety (use your live pair)
+const fallbackURL =
+  typeof window !== "undefined" &&
+  window.location.origin === "https://cal-frontend-4k1s.onrender.com"
+    ? "https://cal-api-otk8.onrender.com"
+    : undefined;
+
+export const BASE_URL = (envURLRaw || fallbackURL || "").replace(/\/+$/, "");
 
 export const api = axios.create({
   baseURL: BASE_URL,
