@@ -1,6 +1,6 @@
 """add description and location columns to events
 
-Revision ID: 20250925_add_description_location
+Revision ID: 20250925_add_desc_loc
 Revises: 9e014ae1434f
 Create Date: 2025-09-25
 """
@@ -11,7 +11,7 @@ import sqlalchemy as sa
 from sqlalchemy import inspect
 
 # revision identifiers, used by Alembic.
-revision: str = "20250925_add_description_location"
+revision: str = "20250925_add_desc_loc"
 down_revision: Union[str, Sequence[str], None] = "9e014ae1434f"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
@@ -24,9 +24,15 @@ def upgrade() -> None:
 
     # Add only if missing
     if "description" not in cols:
-        op.add_column("events", sa.Column("description", sa.String(length=2000), nullable=True))
+        op.add_column(
+            "events",
+            sa.Column("description", sa.String(length=2000), nullable=True),
+        )
     if "location" not in cols:
-        op.add_column("events", sa.Column("location", sa.String(length=255), nullable=True))
+        op.add_column(
+            "events",
+            sa.Column("location", sa.String(length=255), nullable=True),
+        )
 
 
 def downgrade() -> None:
