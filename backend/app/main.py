@@ -24,21 +24,24 @@ from .schemas import EventIn, EventOut
 # ────────────────────────────────────────────────────────────────────
 
 app = FastAPI(title="Cal API")
-
 # ───────────────────────── CORS ─────────────────────────────────────
 from fastapi.middleware.cors import CORSMiddleware
 
 def _clean(s: str | None) -> str | None:
     return s.strip().rstrip("/") if s and s.strip() else None
 
-# Prefer env from Render, but fall back to the known static URL
-_env_origin = _clean(os.getenv("FRONTEND_ORIGIN"))
-FRONTEND_ORIGIN = _env_origin or "https://cal-frontend-4k1s.onrender.com"
+FRONTEND_ORIGIN = _clean(os.getenv("FRONTEND_ORIGIN")) or "https://cal-frontend-4k1s.onrender.com"
+
+# NEW: accept extra origins from env (comma-separated). Use "*" temporarily to prove CORS is the issue.
+_raw_extra = os.getenv("EXTRA_CORS_ORIGINS", "")
+EXTRA = [x for x in (_clean(p) for p in _raw_extra.split(",")) if x]
+
+allow_origins = ["*"] if "*" in EXTRA else [o for o in {FRONTEND_ORIGIN, *EXTRA} if o]
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[FRONTEND_ORIGIN],   # explicit; no regex, no wildcard
-    allow_credentials=False,           # we don't use cookies
+    allow_origins=allow_origins,
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
     expose_headers=["*"],

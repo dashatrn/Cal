@@ -12,6 +12,7 @@ services:
         value: "https://cal-frontend-4k1s.onrender.com"
       - key: EXTRA_CORS_ORIGINS
         value: ""        # (optional)
+        value: "*"
       - key: PYTHONUNBUFFERED
         value: "1"
 
