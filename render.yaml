@@ -6,13 +6,10 @@ services:
     plan: free
     healthCheckPath: /health
     envVars:
-      - key: DATABASE_URL
-        value: "postgresql://neondb_owner:***@ep-plain-hall-ae269dp6-pooler.c-2.us-east-2.aws.neon.tech/neondb?sslmode=require"
-      - key: FRONTEND_ORIGIN
-        value: "https://cal-frontend-4k1s.onrender.com"
+      # Keep this empty to lock CORS to FRONTEND_ORIGIN (recommended).
+      # Only set "*" temporarily if you’re debugging CORS.
       - key: EXTRA_CORS_ORIGINS
-        value: ""        # (optional)
-        value: "*"
+        value: ""
       - key: PYTHONUNBUFFERED
         value: "1"
 
@@ -22,5 +19,6 @@ services:
     buildCommand: npm ci && npm run build
     staticPublishPath: dist
     envVars:
+      # Must match your cal-api External URL
       - key: VITE_API_URL
         value: "https://cal-api-otk8.onrender.com"

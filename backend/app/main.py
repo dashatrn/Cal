@@ -7,7 +7,6 @@ import tempfile
 import uuid
 
 from fastapi import FastAPI, Depends, HTTPException, status, UploadFile, File, Query
-from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy.orm import Session
 from sqlalchemy import select, and_, inspect
@@ -24,15 +23,17 @@ from .schemas import EventIn, EventOut
 # ────────────────────────────────────────────────────────────────────
 
 app = FastAPI(title="Cal API")
+
 # ───────────────────────── CORS ─────────────────────────────────────
 from fastapi.middleware.cors import CORSMiddleware
 
 def _clean(s: str | None) -> str | None:
     return s.strip().rstrip("/") if s and s.strip() else None
 
-FRONTEND_ORIGIN = _clean(os.getenv("FRONTEND_ORIGIN")) or "https://cal-frontend-4k1s.onrender.com"
+# Dashboard sets this in production; we keep a safe default for dev
+FRONTEND_ORIGIN = _clean(os.getenv("FRONTEND_ORIGIN")) or "http://localhost:5173"
 
-# NEW: accept extra origins from env (comma-separated). Use "*" temporarily to prove CORS is the issue.
+# Optional comma-separated extra origins (e.g. during debugging)
 _raw_extra = os.getenv("EXTRA_CORS_ORIGINS", "")
 EXTRA = [x for x in (_clean(p) for p in _raw_extra.split(",")) if x]
 
@@ -41,7 +42,7 @@ allow_origins = ["*"] if "*" in EXTRA else [o for o in {FRONTEND_ORIGIN, *EXTRA}
 app.add_middleware(
     CORSMiddleware,
     allow_origins=allow_origins,
-    allow_credentials=False,
+    allow_credentials=False,      # no cookies/auth yet
     allow_methods=["*"],
     allow_headers=["*"],
     expose_headers=["*"],
@@ -215,7 +216,6 @@ def run_migrations() -> None:
     app_dir = Path(__file__).resolve().parent            # .../backend/app
     cfg = Config(str(app_dir / "alembic.ini"))
     cfg.set_main_option("script_location", str(app_dir / "migrations"))
-    # If DATABASE_URL is set, use it; otherwise env/ini will take over
     if "DATABASE_URL" in os.environ:
         cfg.set_main_option("sqlalchemy.url", os.environ["DATABASE_URL"])
     command.upgrade(cfg, "head")
@@ -227,7 +227,7 @@ def ensure_event_columns(engine) -> None:
         try:
             cols = {c["name"] for c in insp.get_columns("events")}
         except Exception:
-            return  # table not present yet; migrations should handle it
+            return
         if "description" not in cols:
             conn.exec_driver_sql("ALTER TABLE events ADD COLUMN IF NOT EXISTS description TEXT")
         if "location" not in cols:
@@ -235,7 +235,6 @@ def ensure_event_columns(engine) -> None:
 
 @app.on_event("startup")
 def on_startup():
-    # Only run schema work if explicitly enabled
     if os.getenv("AUTO_MIGRATE") == "1":
         run_migrations()
         ensure_event_columns(engine)
@@ -249,6 +248,13 @@ def health_check():
 def read_root():
     return {"message": "FastAPI backend is running."}
 
+# Optional but handy while validating database connectivity
+from sqlalchemy import text
+@app.get("/dbcheck")
+def dbcheck(db: Session = Depends(get_db)):
+    db.execute(text("SELECT 1"))
+    return {"db": "ok"}
+
 # ───────────────────────── Uploads → OCR ────────────────────────────
 @app.post("/uploads", status_code=201)
 async def upload_file(file: UploadFile = File(...)):
@@ -258,22 +264,22 @@ async def upload_file(file: UploadFile = File(...)):
     dest = UPLOAD_DIR / filename
     dest.write_bytes(raw)
 
-    text = ocr_to_text(raw)
+    text_ = ocr_to_text(raw)
     print("──── OCR TEXT ────")
-    print(text)
+    print(text_)
     print("──────────────────")
 
     date_re = re.compile(
         r"\b(\d{4}[-/]\d{1,2}[-/]\d{1,2}|\d{1,2}[-/]\d{1,2}[-/]\d{2,4}|\w+\s+\d{1,2},\s*\d{4})\b",
         re.IGNORECASE,
     )
-    time_m = TIME_RANGE_RE.search(text)
-    date_m = date_re.search(text)
+    time_m = TIME_RANGE_RE.search(text_)
+    date_m = date_re.search(text_)
     if not (date_m and time_m):
         raise HTTPException(status_code=422, detail="Could not parse date/time")
 
     date_iso = dtparse.parse(date_m.group(1)).date().isoformat()
-    tr = parse_time_range(text)
+    tr = parse_time_range(text_)
     if not tr:
         raise HTTPException(status_code=422, detail="Could not parse time range")
     s_h, s_m, e_h, e_m = tr
@@ -281,7 +287,7 @@ async def upload_file(file: UploadFile = File(...)):
     start_iso = f"{date_iso}T{str(s_h).zfill(2)}:{str(s_m).zfill(2)}:00"
     end_iso   = f"{date_iso}T{str(e_h).zfill(2)}:{str(e_m).zfill(2)}:00"
 
-    lines = [ln.strip() for ln in text.splitlines() if ln.strip()]
+    lines = [ln.strip() for ln in text_.splitlines() if ln.strip()]
     try:
         date_idx = next(i for i, l in enumerate(lines) if date_re.search(l))
         title = lines[date_idx + 2]
@@ -322,7 +328,7 @@ async def parse_prompt(payload: dict):
     WEEKDAY = {"mon":0,"tue":1,"tues":1,"wed":2,"thu":3,"thur":3,"thurs":3,"fri":4,"sat":5,"sun":6}
 
     def next_weekday(base: date, target_idx: int, inclusive=False) -> date:
-        cur = base.weekday()  # Mon=0..Sun=6
+        cur = base.weekday()
         delta = (target_idx - cur) % 7
         if delta == 0 and not inclusive:
             delta = 7
@@ -338,10 +344,7 @@ async def parse_prompt(payload: dict):
         if mt:
             kind, wd = mt.groups()
             idx = WEEKDAY[wd]
-            if kind == "this":
-                d = next_weekday(today, idx, inclusive=True)
-            else:
-                d = next_weekday(today, idx, inclusive=False)
+            d = next_weekday(today, idx, inclusive=(kind == "this"))
             return d.isoformat()
         return w
 
@@ -382,7 +385,7 @@ async def parse_prompt(payload: dict):
     base_date = explicit_date or today_local
 
     if every_weeks and not repeat_days:
-        js_dow = (base_date.weekday() + 1) % 7  # map Mon=0..Sun=6 → Sun=0..Sat=6
+        js_dow = (base_date.weekday() + 1) % 7  # Mon=0..Sun=6 → Sun=0..Sat=6
         repeat_days = [js_dow]
 
     if for_weeks and not until_d:
