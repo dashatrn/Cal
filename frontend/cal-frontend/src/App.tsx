@@ -11,25 +11,24 @@ import type {
   EventInput,
   EventContentArg,
 } from "@fullcalendar/core";
-import { listEvents, updateEvent, suggestNext, BASE_URL } from "./api";
+import { listEvents, updateEvent, BASE_URL } from "./api";
 import type { EventOut as ApiEvent, EventIn } from "./api";
 import EventModal from "./EventModal";
-import NewEventModal from "./NewEventModal";
 
 import "./index.css";
 import "./App.css";
 
 type CalEvent = Omit<ApiEvent, "id"> & { id: string };
 
-const HEADER_H = 220;  // approximate header height (plaque + monthbar + controls)
+const HEADER_H = 220;  // approximate header height (plaque + monthbar)
 const TOOLBAR_H = 0;   // we removed internal toolbar
 const EXTRA_PAD = 16;
 
 const LS_VIEW = "cal:view";
 const LS_DATE = "cal:date";
 
-// Custom DOW labels to match your artwork (TUES., THURS., etc.)
-const DOW_FMT = ["SUN.","MON.","TUES.","WED.","THURS.","FRI.","SAT."] as const;
+// Custom DOW labels to match your artwork (TUES., THUR., etc.)
+const DOW_FMT = ["SUN.","MON.","TUES.","WED.","THUR.","FRI.","SAT."] as const;
 
 function headerLabel(date: Date, viewType: string) {
   const dow = DOW_FMT[date.getDay()];
@@ -41,10 +40,24 @@ function headerLabel(date: Date, viewType: string) {
   return `${dow} ${mm}/${dd}`;          // e.g., WED. 02/26
 }
 
+// SVG arrow that matches the mock (solid red arrow inside a round beige button)
+function ArrowSVG({ dir }: { dir: "left" | "right" }) {
+  const transform = dir === "left" ? "scale(-1,1) translate(-56,0)" : undefined;
+  return (
+    <svg width="32" height="32" viewBox="0 0 56 56" aria-hidden focusable="false" className="v-arrow">
+      <g transform={transform}>
+        {/* shaft */}
+        <rect x="12" y="25" width="24" height="6" rx="3" />
+        {/* head */}
+        <path d="M34 14 L48 28 L34 42 Z" />
+      </g>
+    </svg>
+  );
+}
+
 export default function App() {
   const [events, setEvents] = useState<CalEvent[]>([]);
   const [modalInit, setModalInit] = useState<ApiEvent | undefined | null>(null);
-  const [showNew, setShowNew] = useState(false);
   const [vh, setVh] = useState<number>(typeof window !== "undefined" ? window.innerHeight : 800);
   const calRef = useRef<FullCalendar | null>(null);
 
@@ -56,9 +69,8 @@ export default function App() {
   const gotoDate  = (iso: string) => calRef.current?.getApi().gotoDate(iso);
   const gotoPrev  = () => calRef.current?.getApi().prev();
   const gotoNext  = () => calRef.current?.getApi().next();
-  const gotoToday = () => calRef.current?.getApi().today();
 
-  // range-aware reload (safe if backend ignores params)
+  // range-aware reload
   const reload = (start?: string, end?: string) =>
     listEvents(start, end)
       .then((api) => {
@@ -111,37 +123,9 @@ export default function App() {
     setModalInit(null);
   };
 
-  const handleNewSubmit = (
-    p: Partial<EventIn> & {
-      thumb?: string;
-      repeatDays?: number[];
-      repeatUntil?: string;        // YYYY-MM-DD (local)
-      repeatEveryWeeks?: number;   // e.g., 2 for biweekly
-    }
-  ) => {
-    const now = new Date();
-    const defStart = new Date(now); defStart.setMinutes(0,0,0);
-    const defEnd   = new Date(defStart); defEnd.setHours(defStart.getHours() + 1);
-
-    const initial: ApiEvent = {
-      id: 0,
-      title: p.title ?? "",
-      start: p.start ?? defStart.toISOString().slice(0,19),
-      end:   p.end   ?? defEnd.toISOString().slice(0,19),
-    } as any;
-
-    (initial as any).thumb = p.thumb;
-    (initial as any).repeatDays = p.repeatDays;
-    (initial as any).repeatUntil = p.repeatUntil;
-    (initial as any).repeatEveryWeeks = p.repeatEveryWeeks;
-
-    setModalInit(initial);
-    setShowNew(false);
-  };
-
   const CAL_HEIGHT = Math.max(320, vh - HEADER_H - TOOLBAR_H - EXTRA_PAD);
 
-  // ---------- ICS export for visible range ----------
+  // ---------- ICS export for visible range (kept for future use) ----------
   const exportICS = () => {
     const api = calRef.current?.getApi();
     if (!api) return;
@@ -173,22 +157,7 @@ export default function App() {
       await updateEvent(id, payload);
       reload(); // reflect changes
     } catch (err: any) {
-      if (err?.response?.status === 409) {
-        try {
-          const s = await suggestNext(payload.start, payload.end);
-          const ok = window.confirm(
-            `That time conflicts. Use next free slot?\n\n` +
-            `${new Date(s.start).toLocaleString()} – ${new Date(s.end).toLocaleTimeString()}`
-          );
-          if (ok) {
-            fcEvent.setStart(new Date(s.start));
-            fcEvent.setEnd(new Date(s.end));
-            await updateEvent(id, buildPayloadFromEvent(fcEvent));
-            reload();
-            return;
-          }
-        } catch { /* ignore */ }
-      }
+      // on conflict just revert — advanced "suggest next" lives in modal flow
       revert();
     }
   }
@@ -224,8 +193,12 @@ export default function App() {
   return (
     <>
       {/* Left/Right arrows floating outside paper */}
-      <button className="v-nav v-nav-left" onClick={gotoPrev}><span className="chev">◀</span></button>
-      <button className="v-nav v-nav-right" onClick={gotoNext}><span className="chev">▶</span></button>
+      <button className="v-nav v-nav-left" onClick={gotoPrev} aria-label="Previous week">
+        <ArrowSVG dir="left" />
+      </button>
+      <button className="v-nav v-nav-right" onClick={gotoNext} aria-label="Next week">
+        <ArrowSVG dir="right" />
+      </button>
 
       {/* OUTER PAPER */}
       <div className="v-paper">
@@ -241,16 +214,6 @@ export default function App() {
           <div className="v-year">{year}</div>
         </div>
 
-        {/* Controls (outside calendar) */}
-        <div className="v-controls">
-          <button onClick={() => setShowNew(true)} className="v-btn">+ New</button>
-          <button onClick={gotoToday} className="v-btn secondary">Today</button>
-          <button onClick={() => calRef.current?.getApi().changeView("timeGridDay")} className="v-btn secondary">Day</button>
-          <button onClick={() => calRef.current?.getApi().changeView("timeGridWeek")} className="v-btn secondary">Week</button>
-          <button onClick={() => calRef.current?.getApi().changeView("dayGridMonth")} className="v-btn secondary">Month</button>
-          <button onClick={exportICS} className="v-btn secondary" style={{ marginLeft: "auto" }}>Export ICS</button>
-        </div>
-
         {/* Calendar */}
         <main className="relative flex-1 min-h-0 px-0 pb-4">
           <FullCalendar
@@ -258,6 +221,9 @@ export default function App() {
             plugins={[dayGridPlugin, timeGridPlugin, interactionPlugin]}
             initialView="timeGridWeek"
             headerToolbar={false}
+            allDaySlot={false}            // ← remove ALL-DAY row to match mock
+            slotDuration="01:00:00"       // ← hourly rows (no dotted half-hours)
+            slotLabelInterval="01:00"     // ← show one label per hour
             timeZone="local"
             height={CAL_HEIGHT}
             eventDisplay="block"
@@ -311,12 +277,6 @@ export default function App() {
           onSaved={handleSaved}
         />
       )}
-
-      <NewEventModal
-        open={showNew}
-        onClose={() => setShowNew(false)}
-        onSubmit={handleNewSubmit}
-      />
     </>
   );
 }

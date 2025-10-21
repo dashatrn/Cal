@@ -20,10 +20,13 @@ html, body, #root { min-height: 100%; }
 /* ───────────────── Vintage theme layer (from your mockups) ─────────────── */
 
 :root{
-  --paper: #b0a080;   /* tan */
+  --paper: #bda982;   /* tan, tweaked to match screenshot */
   --ink:   #000000;   /* black */
-  --rail:  #373228;   /* dark rails */
-  --accent:#b42818;   /* FEBRUARY red */
+  --rail:  #2f2b24;   /* dark rails */
+  --accent:#b42818;   /* month red + arrow red */
+  --bevel: #e9dec7;   /* light bevel for nav */
+  --navface:#cfb78f;  /* nav face */
+  --navring:#8c7a59;  /* outer ring */
 }
 
 html, body {
@@ -80,45 +83,31 @@ html, body {
   text-align: center;
 }
 
-/* Controls row (outside calendar) */
-.v-controls {
-  position: relative;
-  height: 40px;
-  margin: 10px 56px 0;
-  display: flex;
-  gap: 8px;
-}
-.v-btn {
-  background: #000;
-  color: #fff;
-  padding: 6px 10px;
-  border-radius: 4px;
-  font-size: 14px;
-}
-.v-btn.secondary {
-  background: transparent;
-  color: #000;
-  border: 1px solid #000;
-}
-
-/* Outside nav arrows */
+/* Outside nav arrows — match the beige round buttons with red arrows + drop shadow */
 .v-nav {
   position: fixed;
   top: 50%;
   transform: translateY(-50%);
-  width: 56px; height: 56px;
+  width: 72px; height: 72px;
   border-radius: 999px;
-  background: #c7b38b;
-  box-shadow: 0 2px 0 rgba(0,0,0,.35);
-  border: 2px solid #8c7a59;
+  background: radial-gradient(115% 115% at 30% 25%, var(--bevel) 0%, var(--navface) 55%, #b79f75 100%);
+  box-shadow:
+    0 4px 0 rgba(0,0,0,.35),        /* drop shadow */
+    inset 0 0 0 2px rgba(0,0,0,.12);/* inner ring */
+  border: 2px solid var(--navring);  /* outer ring */
   display: grid; place-content: center;
   cursor: pointer;
   z-index: 5;
   user-select: none;
 }
-.v-nav-left  { left: 18px; }
-.v-nav-right { right: 18px; }
-.v-nav .chev { font-size: 30px; color: var(--accent); line-height: 1; }
+.v-nav-left  { left: 24px; }
+.v-nav-right { right: 24px; }
+.v-nav:hover { filter: brightness(1.02); }
+
+.v-arrow rect,
+.v-arrow path {
+  fill: var(--accent);
+}
 
 /* FullCalendar look */
 .fc { background: var(--paper); }
@@ -163,6 +152,9 @@ html, body {
 
 /* Hide FullCalendar’s default title/toolbar; we render our own header */
 .fc .fc-toolbar { display: none !important; }
+
+/* Remove dotted half-hour minor lines for a cleaner ledger look */
+.fc .fc-timegrid-slot-minor { border-top: none !important; }
 
 /* Events simple look (square, black border) */
 .fc-event {
