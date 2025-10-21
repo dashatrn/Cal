@@ -155,6 +155,9 @@ html, body {
   text-transform: uppercase; /* 'am' → 'AM' */
 }
 
+/* Remove FullCalendar's default yellow "today" background */
+.fc .fc-day-today { background: transparent !important; }
+
 /* No weekend shading; keep paper background */
 .fc .fc-day-sat, .fc .fc-day-sun { background: transparent; }
 

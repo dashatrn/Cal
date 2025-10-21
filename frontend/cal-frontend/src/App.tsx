@@ -153,7 +153,6 @@ export default function App() {
 
   // ---------- Drag/drop + resize handlers ----------
   const buildPayloadFromEvent = (fc: any): EventIn => {
-    // fc is FullCalendar's EventApi
     const ext = fc.extendedProps || {};
     const startIso = fc.start ? fc.start.toISOString() : new Date().toISOString();
     const endIso   = fc.end   ? fc.end.toISOString()   : new Date(fc.start.getTime()+60*60*1000).toISOString();
@@ -242,7 +241,7 @@ export default function App() {
           <div className="v-year">{year}</div>
         </div>
 
-        {/* Controls (outside calendar body) */}
+        {/* Controls (outside calendar) */}
         <div className="v-controls">
           <button onClick={() => setShowNew(true)} className="v-btn">+ New</button>
           <button onClick={gotoToday} className="v-btn secondary">Today</button>
@@ -273,11 +272,18 @@ export default function App() {
               const bits = [loc, desc].filter(Boolean);
               if (bits.length) info.el.title = bits.join("\n\n");
             }}
-            /* ——— formatting to match your mockups ——— */
-            slotLabelFormat={[{ hour: 'numeric', minute: '2-digit', meridiem: 'short' }]}
+
+            /* ——— The three lines below produce your desired time axis ——— */
+            scrollTime="00:00:00"       // don’t auto-scroll to 6am
+            slotMinTime="00:00:00"      // show hours starting at midnight
+            slotMaxTime="24:00:00"      // show full day
+
+            /* Label format like “12AM, 1AM, …” (no minutes) */
+            slotLabelFormat={[{ hour: "numeric", meridiem: "short" }]}
+
+            /* Day headers to match mockups (SUN. 02/23 etc.) */
             dayHeaderContent={(args) => headerLabel(args.date, args.view.type)}
             firstDay={0}  // Sunday
-            /* ———————————————————————————————— */
             dateClick={(arg: DateClickArg) => openCreate(arg.dateStr)}
             eventClick={(arg: EventClickArg) => {
               const e = events.find((x) => x.id === arg.event.id);
