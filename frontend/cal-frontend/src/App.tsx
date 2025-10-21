@@ -21,12 +21,25 @@ import "./App.css";
 
 type CalEvent = Omit<ApiEvent, "id"> & { id: string };
 
-const HEADER_H = 64;   // h-16
-const TOOLBAR_H = 48;  // h-12
-const EXTRA_PAD = 16;  // breathing room
+const HEADER_H = 220;  // approximate header height (plaque + monthbar + controls)
+const TOOLBAR_H = 0;   // we removed internal toolbar
+const EXTRA_PAD = 16;
 
 const LS_VIEW = "cal:view";
 const LS_DATE = "cal:date";
+
+// Custom DOW labels to match your artwork (TUES., THURS., etc.)
+const DOW_FMT = ["SUN.","MON.","TUES.","WED.","THURS.","FRI.","SAT."] as const;
+
+function headerLabel(date: Date, viewType: string) {
+  const dow = DOW_FMT[date.getDay()];
+  if (viewType === "dayGridMonth") {
+    return dow;                         // e.g., SUN.
+  }
+  const mm = String(date.getMonth() + 1).padStart(2, "0");
+  const dd = String(date.getDate()).padStart(2, "0");
+  return `${dow} ${mm}/${dd}`;          // e.g., WED. 02/26
+}
 
 export default function App() {
   const [events, setEvents] = useState<CalEvent[]>([]);
@@ -34,6 +47,11 @@ export default function App() {
   const [showNew, setShowNew] = useState(false);
   const [vh, setVh] = useState<number>(typeof window !== "undefined" ? window.innerHeight : 800);
   const calRef = useRef<FullCalendar | null>(null);
+
+  // anchor date for large header (Month + Year)
+  const [anchor, setAnchor] = useState<Date>(new Date());
+  const monthName = anchor.toLocaleString("en-US", { month: "long" }).toUpperCase();
+  const year = anchor.getFullYear();
 
   const gotoDate  = (iso: string) => calRef.current?.getApi().gotoDate(iso);
   const gotoPrev  = () => calRef.current?.getApi().prev();
@@ -50,8 +68,6 @@ export default function App() {
       })
       .catch((e) => { console.error(e); return []; });
 
-  
-
   // initial load + restore view/date
   useEffect(() => {
     reload().then((loaded) => {
@@ -62,8 +78,9 @@ export default function App() {
         if (savedView) api.changeView(savedView);
         if (savedDate) api.gotoDate(savedDate);
         else if (loaded.length) api.gotoDate(loaded[loaded.length - 1]!.start);
-
       }
+      const current = api?.getDate();
+      if (current) setAnchor(current);
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -138,14 +155,12 @@ export default function App() {
   const buildPayloadFromEvent = (fc: any): EventIn => {
     // fc is FullCalendar's EventApi
     const ext = fc.extendedProps || {};
-    // Important: toISOString() -> UTC ISO (backend expects that)
     const startIso = fc.start ? fc.start.toISOString() : new Date().toISOString();
     const endIso   = fc.end   ? fc.end.toISOString()   : new Date(fc.start.getTime()+60*60*1000).toISOString();
     return {
       title: fc.title,
       start: startIso,
       end:   endIso,
-      // include optional fields if present
       description: typeof ext.description === "string" ? ext.description : undefined,
       location:    typeof ext.location === "string" ? ext.location : undefined,
     };
@@ -159,26 +174,22 @@ export default function App() {
       await updateEvent(id, payload);
       reload(); // reflect changes
     } catch (err: any) {
-      // try suggestion on conflict
       if (err?.response?.status === 409) {
         try {
           const s = await suggestNext(payload.start, payload.end);
           const ok = window.confirm(
             `That time conflicts. Use next free slot?\n\n` +
-            `${new Date(s.start).toLocaleString()} – ${new Date(s.end).toLocaleTimeString()}`);
+            `${new Date(s.start).toLocaleString()} – ${new Date(s.end).toLocaleTimeString()}`
+          );
           if (ok) {
-            // move the dragged/resized event visually, then save again
             fcEvent.setStart(new Date(s.start));
             fcEvent.setEnd(new Date(s.end));
             await updateEvent(id, buildPayloadFromEvent(fcEvent));
             reload();
             return;
           }
-        } catch {
-          /* ignore suggest errors; we’ll revert */
-        }
+        } catch { /* ignore */ }
       }
-      // anything else → revert
       revert();
     }
   }
@@ -212,57 +223,37 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
-      <div className="app-shell flex min-h-screen flex-col w-full">
-        <header className="h-16 relative flex items-center justify-center bg-white shadow">
-          <button
-            onClick={() => setShowNew(true)}
-            className="absolute left-6 bg-black text-white px-3 py-1 rounded"
-          >
-            + New
-          </button>
-          <h1 className="text-xl font-semibold select-none">Cal</h1>
+    <>
+      {/* Left/Right arrows floating outside paper */}
+      <button className="v-nav v-nav-left" onClick={gotoPrev}><span className="chev">◀</span></button>
+      <button className="v-nav v-nav-right" onClick={gotoNext}><span className="chev">▶</span></button>
 
-          <button
-            onClick={exportICS}
-            className="absolute right-6 px-3 py-1 rounded border"
-            title="Export current view to ICS"
-          >
-            Export ICS
-          </button>
-        </header>
-
-        <div className="h-12 flex items-center justify-between px-4 md:px-8 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
-          <div className="space-x-1 text-sm">
-            <button onClick={gotoToday} className="px-2 py-1 rounded hover:bg-gray-100 dark:hover:bg-gray-700">Today</button>
-            {(["dayGridDay", "timeGridWeek", "dayGridMonth"] as const).map((v) => (
-              <button
-                key={v}
-                onClick={() => calRef.current?.getApi().changeView(v)}
-                className="px-2 py-1 rounded hover:bg-gray-100 dark:hover:bg-gray-700"
-              >
-                {v === "dayGridDay" ? "Day" : v === "timeGridWeek" ? "Week" : "Month"}
-              </button>
-            ))}
-          </div>
-
-          <div className="space-x-1">
-            <button
-              onClick={gotoPrev}
-              className="hidden md:grid fixed left-2 top-1/2 -translate-y-1/2 w-10 h-10 bg-white rounded-full shadow place-content-center"
-            >
-              ‹
-            </button>
-            <button
-              onClick={gotoNext}
-              className="hidden md:grid fixed right-2 top-1/2 -translate-y-1/2 w-10 h-10 bg-white rounded-full shadow place-content-center"
-            >
-              ›
-            </button>
-          </div>
+      {/* OUTER PAPER */}
+      <div className="v-paper">
+        {/* Plaque with “Cal” */}
+        <div className="v-plaque">
+          <div className="v-cal-logo">Cal</div>
         </div>
 
-        <main className="relative flex-1 min-h-0 px-0 md:px-0 pb-4">
+        {/* Month title row */}
+        <div className="v-monthbar">
+          <div className="v-year">{year}</div>
+          <div className="v-month">{monthName}</div>
+          <div className="v-year">{year}</div>
+        </div>
+
+        {/* Controls (outside calendar body) */}
+        <div className="v-controls">
+          <button onClick={() => setShowNew(true)} className="v-btn">+ New</button>
+          <button onClick={gotoToday} className="v-btn secondary">Today</button>
+          <button onClick={() => calRef.current?.getApi().changeView("timeGridDay")} className="v-btn secondary">Day</button>
+          <button onClick={() => calRef.current?.getApi().changeView("timeGridWeek")} className="v-btn secondary">Week</button>
+          <button onClick={() => calRef.current?.getApi().changeView("dayGridMonth")} className="v-btn secondary">Month</button>
+          <button onClick={exportICS} className="v-btn secondary" style={{ marginLeft: "auto" }}>Export ICS</button>
+        </div>
+
+        {/* Calendar */}
+        <main className="relative flex-1 min-h-0 px-0 pb-4">
           <FullCalendar
             ref={calRef}
             plugins={[dayGridPlugin, timeGridPlugin, interactionPlugin]}
@@ -272,30 +263,35 @@ export default function App() {
             height={CAL_HEIGHT}
             eventDisplay="block"
             events={events as EventInput[]}
-            editable={true}                // ← enable drag & resize
+            editable={true}
             eventDrop={onEventDrop}
             eventResize={onEventResize}
             eventContent={renderEvent}
             eventDidMount={(info) => {
-              // Simple tooltip using title attribute with description if present
               const desc = info.event.extendedProps?.description as string | undefined;
               const loc  = info.event.extendedProps?.location as string | undefined;
               const bits = [loc, desc].filter(Boolean);
               if (bits.length) info.el.title = bits.join("\n\n");
             }}
+            /* ——— formatting to match your mockups ——— */
+            slotLabelFormat={[{ hour: 'numeric', minute: '2-digit', meridiem: 'short' }]}
+            dayHeaderContent={(args) => headerLabel(args.date, args.view.type)}
+            firstDay={0}  // Sunday
+            /* ———————————————————————————————— */
             dateClick={(arg: DateClickArg) => openCreate(arg.dateStr)}
             eventClick={(arg: EventClickArg) => {
               const e = events.find((x) => x.id === arg.event.id);
               if (e) openEdit({ ...e, id: +e.id });
             }}
             datesSet={(arg) => {
-              // persist current view & anchor date
               localStorage.setItem(LS_VIEW, arg.view.type);
               const current = calRef.current?.getApi().getDate();
-              if (current) localStorage.setItem(LS_DATE, current.toISOString());
-              // fetch only visible range (safe if backend ignores)
-              const startStr = arg.startStr; // ISO
-              const endStr   = arg.endStr;   // ISO (exclusive)
+              if (current) {
+                localStorage.setItem(LS_DATE, current.toISOString());
+                setAnchor(current);     // keep header in sync
+              }
+              const startStr = arg.startStr;
+              const endStr   = arg.endStr;
               reload(startStr, endStr);
             }}
           />
@@ -315,6 +311,6 @@ export default function App() {
         onClose={() => setShowNew(false)}
         onSubmit={handleNewSubmit}
       />
-    </div>
+    </>
   );
 }
