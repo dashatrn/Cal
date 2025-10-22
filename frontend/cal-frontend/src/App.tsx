@@ -41,16 +41,14 @@ function headerLabel(date: Date, viewType: string) {
   return `${dow} ${mm}/${dd}`; // e.g., WED. 02/26
 }
 
-// SVG arrow that matches the mock (solid red arrow inside a round beige button)
+// SVG arrow — slightly larger glyph to match mock
 function ArrowSVG({ dir }: { dir: "left" | "right" }) {
   const transform = dir === "left" ? "scale(-1,1) translate(-56,0)" : undefined;
   return (
-    <svg width="32" height="32" viewBox="0 0 56 56" aria-hidden focusable="false" className="v-arrow">
+    <svg width="44" height="44" viewBox="0 0 56 56" aria-hidden focusable="false" className="v-arrow">
       <g transform={transform}>
-        {/* shaft */}
-        <rect x="12" y="25" width="24" height="6" rx="3" />
-        {/* head */}
-        <path d="M34 14 L48 28 L34 42 Z" />
+        <rect x="10" y="24" width="28" height="8" rx="4" />
+        <path d="M36 12 L50 28 L36 44 Z" />
       </g>
     </svg>
   );
@@ -174,8 +172,7 @@ export default function App() {
       await updateEvent(id, payload);
       reload(); // reflect changes
     } catch (_err: any) {
-      // on conflict just revert — advanced "suggest next" lives in modal flow
-      revert();
+      revert(); // on conflict just revert — advanced "suggest next" lives in modal flow
     }
   }
 
@@ -209,16 +206,16 @@ export default function App() {
 
   return (
     <>
-      {/* Left/Right arrows floating outside paper */}
-      <button className="v-nav v-nav-left" onClick={gotoPrev} aria-label="Previous week">
-        <ArrowSVG dir="left" />
-      </button>
-      <button className="v-nav v-nav-right" onClick={gotoNext} aria-label="Next week">
-        <ArrowSVG dir="right" />
-      </button>
-
       {/* OUTER PAPER */}
       <div className="v-paper">
+        {/* Left/Right arrows — now positioned relative to the paper, close to the edge */}
+        <button className="v-nav v-nav-left" onClick={gotoPrev} aria-label="Previous period">
+          <ArrowSVG dir="left" />
+        </button>
+        <button className="v-nav v-nav-right" onClick={gotoNext} aria-label="Next period">
+          <ArrowSVG dir="right" />
+        </button>
+
         {/* Top-left toolbox button (inside the page, to the left of the calendar) */}
         <div ref={toolsRef} className="v-tools">
           <button
@@ -326,13 +323,10 @@ export default function App() {
               const bits = [loc, desc].filter(Boolean);
               if (bits.length) info.el.title = bits.join("\n\n");
             }}
-            /* ——— The three lines below produce your desired time axis ——— */
-            scrollTime="00:00:00" // don’t auto-scroll to 6am
-            slotMinTime="00:00:00" // show hours starting at midnight
-            slotMaxTime="24:00:00" // show full day
-            /* Label format like “12AM, 1AM, …” (no minutes) */
+            scrollTime="00:00:00"
+            slotMinTime="00:00:00"
+            slotMaxTime="24:00:00"
             slotLabelFormat={[{ hour: "numeric", meridiem: "short" }]}
-            /* Day headers to match mockups (SUN. 02/23 etc.) */
             dayHeaderContent={(args) => headerLabel(args.date, args.view.type)}
             firstDay={0} // Sunday
             dateClick={(arg: DateClickArg) => openCreate(arg.dateStr)}
@@ -371,13 +365,12 @@ export default function App() {
           setShowNew(false);
           const start = p.start ?? new Date().toISOString();
           const end = p.end ?? new Date(Date.now() + 60 * 60 * 1000).toISOString();
-          // pass pre-parsed fields through; EventModal understands these extras
           setModalInit({
             id: 0,
             title: p.title ?? "",
             start,
             end,
-            // @ts-ignore – allow extras for EventModal helper features
+            // @ts-ignore extras for EventModal helper features
             thumb: p.thumb,
             // @ts-ignore
             repeatDays: p.repeatDays,
