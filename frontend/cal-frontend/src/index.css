@@ -45,6 +45,7 @@ html, body {
   min-height: 100vh;
   display: grid;
   grid-template-rows: auto auto 1fr; /* plaque, monthbar, calendar */
+  position: relative;               /* anchor toolbox dropdown */
 }
 
 /* Plaque with “Cal” */
@@ -83,6 +84,44 @@ html, body {
   text-align: center;
 }
 
+/* Toolbox button (top-left, inside paper, left of the calendar) */
+.v-tools {
+  position: absolute;
+  /* place just under the plaque and to the left of the grid */
+  top: 126px;         /* adjust if your header changes */
+  left: 22px;
+  z-index: 6;
+}
+.v-toolbtn {
+  width: 42px; height: 42px;
+  display: grid; place-items: center;
+  background: radial-gradient(115% 115% at 30% 25%, var(--bevel) 0%, var(--navface) 55%, #b79f75 100%);
+  border: 2px solid var(--navring);
+  border-radius: 10px;
+  box-shadow: inset 0 0 0 2px rgba(0,0,0,.12);
+  color: var(--accent);
+  cursor: pointer;
+}
+.v-menu {
+  position: absolute;
+  top: 48px; left: 0;
+  background: var(--paper);
+  border: 3px solid var(--ink);
+  box-shadow: 0 4px 0 rgba(0,0,0,.35);
+  padding: 6px;
+  width: 180px;
+}
+.v-menu-item {
+  width: 100%;
+  text-align: left;
+  padding: 6px 10px;
+  margin: 4px 0;
+  border: 2px solid var(--ink);
+  background: #fff;
+  font-weight: 700;
+}
+.v-menu-item:active { transform: translateY(1px); }
+
 /* Outside nav arrows — match the beige round buttons with red arrows + drop shadow */
 .v-nav {
   position: fixed;
@@ -116,6 +155,9 @@ html, body {
 .fc-theme-standard .fc-scrollgrid { border: 4px solid var(--ink); }
 .fc-theme-standard td,
 .fc-theme-standard th { border: 2px solid var(--ink); }
+
+/* Remove extra white space some themes add below the grid */
+.fc .fc-view-harness { margin-bottom: 0 !important; }
 
 /* Column headers */
 .fc .fc-col-header { background: transparent; }

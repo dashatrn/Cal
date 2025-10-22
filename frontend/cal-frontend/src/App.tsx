@@ -14,30 +14,31 @@ import type {
 import { listEvents, updateEvent, BASE_URL } from "./api";
 import type { EventOut as ApiEvent, EventIn } from "./api";
 import EventModal from "./EventModal";
+import NewEventModal from "./NewEventModal";
 
 import "./index.css";
 import "./App.css";
 
 type CalEvent = Omit<ApiEvent, "id"> & { id: string };
 
-const HEADER_H = 220;  // approximate header height (plaque + monthbar)
-const TOOLBAR_H = 0;   // we removed internal toolbar
-const EXTRA_PAD = 16;
+const HEADER_H = 220; // approximate header height (plaque + monthbar)
+const TOOLBAR_H = 0;  // internal toolbar removed
+const EXTRA_PAD = 0;  // no obvious bottom space
 
 const LS_VIEW = "cal:view";
 const LS_DATE = "cal:date";
 
 // Custom DOW labels to match your artwork (TUES., THUR., etc.)
-const DOW_FMT = ["SUN.","MON.","TUES.","WED.","THUR.","FRI.","SAT."] as const;
+const DOW_FMT = ["SUN.", "MON.", "TUES.", "WED.", "THUR.", "FRI.", "SAT."] as const;
 
 function headerLabel(date: Date, viewType: string) {
   const dow = DOW_FMT[date.getDay()];
   if (viewType === "dayGridMonth") {
-    return dow;                         // e.g., SUN.
+    return dow; // e.g., SUN.
   }
   const mm = String(date.getMonth() + 1).padStart(2, "0");
   const dd = String(date.getDate()).padStart(2, "0");
-  return `${dow} ${mm}/${dd}`;          // e.g., WED. 02/26
+  return `${dow} ${mm}/${dd}`; // e.g., WED. 02/26
 }
 
 // SVG arrow that matches the mock (solid red arrow inside a round beige button)
@@ -58,17 +59,20 @@ function ArrowSVG({ dir }: { dir: "left" | "right" }) {
 export default function App() {
   const [events, setEvents] = useState<CalEvent[]>([]);
   const [modalInit, setModalInit] = useState<ApiEvent | undefined | null>(null);
+  const [showNew, setShowNew] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
   const [vh, setVh] = useState<number>(typeof window !== "undefined" ? window.innerHeight : 800);
   const calRef = useRef<FullCalendar | null>(null);
+  const toolsRef = useRef<HTMLDivElement | null>(null);
 
   // anchor date for large header (Month + Year)
   const [anchor, setAnchor] = useState<Date>(new Date());
   const monthName = anchor.toLocaleString("en-US", { month: "long" }).toUpperCase();
   const year = anchor.getFullYear();
 
-  const gotoDate  = (iso: string) => calRef.current?.getApi().gotoDate(iso);
-  const gotoPrev  = () => calRef.current?.getApi().prev();
-  const gotoNext  = () => calRef.current?.getApi().next();
+  const gotoDate = (iso: string) => calRef.current?.getApi().gotoDate(iso);
+  const gotoPrev = () => calRef.current?.getApi().prev();
+  const gotoNext = () => calRef.current?.getApi().next();
 
   // range-aware reload
   const reload = (start?: string, end?: string) =>
@@ -78,7 +82,10 @@ export default function App() {
         setEvents(evs);
         return evs;
       })
-      .catch((e) => { console.error(e); return []; });
+      .catch((e) => {
+        console.error(e);
+        return [];
+      });
 
   // initial load + restore view/date
   useEffect(() => {
@@ -108,16 +115,25 @@ export default function App() {
     return () => window.removeEventListener("resize", onResize);
   }, []);
 
+  // close dropdown when clicking outside
+  useEffect(() => {
+    const onDoc = (e: MouseEvent) => {
+      if (!toolsRef.current?.contains(e.target as Node)) setMenuOpen(false);
+    };
+    document.addEventListener("mousedown", onDoc);
+    return () => document.removeEventListener("mousedown", onDoc);
+  }, []);
+
   const openCreate = (dateISO?: string) =>
     setModalInit(
       dateISO
         ? { id: 0, title: "", start: dateISO + "T00:00", end: dateISO + "T01:00" }
-        : undefined,
+        : undefined
     );
 
   const openEdit = (evt: ApiEvent) => setModalInit(evt);
 
-  const handleSaved = (e: ApiEvent | undefined, _mode?: "create"|"update"|"delete") => {
+  const handleSaved = (e: ApiEvent | undefined, _mode?: "create" | "update" | "delete") => {
     if (e) gotoDate(e.start);
     reload();
     setModalInit(null);
@@ -130,7 +146,7 @@ export default function App() {
     const api = calRef.current?.getApi();
     if (!api) return;
     const start = api.view.activeStart.toISOString();
-    const end   = api.view.activeEnd.toISOString();
+    const end = api.view.activeEnd.toISOString();
     const url = `${BASE_URL}/events.ics?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`;
     window.open(url, "_blank");
   };
@@ -139,13 +155,14 @@ export default function App() {
   const buildPayloadFromEvent = (fc: any): EventIn => {
     const ext = fc.extendedProps || {};
     const startIso = fc.start ? fc.start.toISOString() : new Date().toISOString();
-    const endIso   = fc.end   ? fc.end.toISOString()   : new Date(fc.start.getTime()+60*60*1000).toISOString();
+    const endIso =
+      fc.end ? fc.end.toISOString() : new Date(fc.start.getTime() + 60 * 60 * 1000).toISOString();
     return {
       title: fc.title,
       start: startIso,
-      end:   endIso,
+      end: endIso,
       description: typeof ext.description === "string" ? ext.description : undefined,
-      location:    typeof ext.location === "string" ? ext.location : undefined,
+      location: typeof ext.location === "string" ? ext.location : undefined,
     };
   };
 
@@ -156,7 +173,7 @@ export default function App() {
     try {
       await updateEvent(id, payload);
       reload(); // reflect changes
-    } catch (err: any) {
+    } catch (_err: any) {
       // on conflict just revert — advanced "suggest next" lives in modal flow
       revert();
     }
@@ -202,6 +219,77 @@ export default function App() {
 
       {/* OUTER PAPER */}
       <div className="v-paper">
+        {/* Top-left toolbox button (inside the page, to the left of the calendar) */}
+        <div ref={toolsRef} className="v-tools">
+          <button
+            type="button"
+            className="v-toolbtn"
+            aria-label="Calendar tools"
+            onClick={() => setMenuOpen((v) => !v)}
+          >
+            {/* toolbox icon */}
+            <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden>
+              <rect x="3" y="8" width="18" height="10" rx="2" />
+              <path
+                d="M8 8V6a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+              />
+              <rect x="7" y="11" width="10" height="3" rx="1" fill="currentColor" />
+            </svg>
+          </button>
+          {menuOpen && (
+            <div className="v-menu">
+              <button
+                className="v-menu-item"
+                onClick={() => {
+                  calRef.current?.getApi().today();
+                  setMenuOpen(false);
+                }}
+              >
+                Today
+              </button>
+              <button
+                className="v-menu-item"
+                onClick={() => {
+                  calRef.current?.getApi().changeView("timeGridDay");
+                  setMenuOpen(false);
+                }}
+              >
+                Day
+              </button>
+              <button
+                className="v-menu-item"
+                onClick={() => {
+                  calRef.current?.getApi().changeView("timeGridWeek");
+                  setMenuOpen(false);
+                }}
+              >
+                Week
+              </button>
+              <button
+                className="v-menu-item"
+                onClick={() => {
+                  calRef.current?.getApi().changeView("dayGridMonth");
+                  setMenuOpen(false);
+                }}
+              >
+                Month
+              </button>
+              <button
+                className="v-menu-item"
+                onClick={() => {
+                  setMenuOpen(false);
+                  setShowNew(true);
+                }}
+              >
+                + New
+              </button>
+            </div>
+          )}
+        </div>
+
         {/* Plaque with “Cal” */}
         <div className="v-plaque">
           <div className="v-cal-logo">Cal</div>
@@ -215,15 +303,15 @@ export default function App() {
         </div>
 
         {/* Calendar */}
-        <main className="relative flex-1 min-h-0 px-0 pb-4">
+        <main className="relative flex-1 min-h-0 px-0 pb-0">
           <FullCalendar
             ref={calRef}
             plugins={[dayGridPlugin, timeGridPlugin, interactionPlugin]}
             initialView="timeGridWeek"
             headerToolbar={false}
-            allDaySlot={false}            // ← remove ALL-DAY row to match mock
-            slotDuration="01:00:00"       // ← hourly rows (no dotted half-hours)
-            slotLabelInterval="01:00"     // ← show one label per hour
+            allDaySlot={false} // ← remove ALL-DAY row to match mock
+            slotDuration="01:00:00" // ← hourly rows (no dotted half-hours)
+            slotLabelInterval="01:00" // ← show one label per hour
             timeZone="local"
             height={CAL_HEIGHT}
             eventDisplay="block"
@@ -234,22 +322,19 @@ export default function App() {
             eventContent={renderEvent}
             eventDidMount={(info) => {
               const desc = info.event.extendedProps?.description as string | undefined;
-              const loc  = info.event.extendedProps?.location as string | undefined;
+              const loc = info.event.extendedProps?.location as string | undefined;
               const bits = [loc, desc].filter(Boolean);
               if (bits.length) info.el.title = bits.join("\n\n");
             }}
-
             /* ——— The three lines below produce your desired time axis ——— */
-            scrollTime="00:00:00"       // don’t auto-scroll to 6am
-            slotMinTime="00:00:00"      // show hours starting at midnight
-            slotMaxTime="24:00:00"      // show full day
-
+            scrollTime="00:00:00" // don’t auto-scroll to 6am
+            slotMinTime="00:00:00" // show hours starting at midnight
+            slotMaxTime="24:00:00" // show full day
             /* Label format like “12AM, 1AM, …” (no minutes) */
             slotLabelFormat={[{ hour: "numeric", meridiem: "short" }]}
-
             /* Day headers to match mockups (SUN. 02/23 etc.) */
             dayHeaderContent={(args) => headerLabel(args.date, args.view.type)}
-            firstDay={0}  // Sunday
+            firstDay={0} // Sunday
             dateClick={(arg: DateClickArg) => openCreate(arg.dateStr)}
             eventClick={(arg: EventClickArg) => {
               const e = events.find((x) => x.id === arg.event.id);
@@ -260,10 +345,10 @@ export default function App() {
               const current = calRef.current?.getApi().getDate();
               if (current) {
                 localStorage.setItem(LS_DATE, current.toISOString());
-                setAnchor(current);     // keep header in sync
+                setAnchor(current); // keep header in sync
               }
               const startStr = arg.startStr;
-              const endStr   = arg.endStr;
+              const endStr = arg.endStr;
               reload(startStr, endStr);
             }}
           />
@@ -277,6 +362,32 @@ export default function App() {
           onSaved={handleSaved}
         />
       )}
+
+      {/* New → parse (text/image) → hand off to EventModal */}
+      <NewEventModal
+        open={showNew}
+        onClose={() => setShowNew(false)}
+        onSubmit={(p) => {
+          setShowNew(false);
+          const start = p.start ?? new Date().toISOString();
+          const end = p.end ?? new Date(Date.now() + 60 * 60 * 1000).toISOString();
+          // pass pre-parsed fields through; EventModal understands these extras
+          setModalInit({
+            id: 0,
+            title: p.title ?? "",
+            start,
+            end,
+            // @ts-ignore – allow extras for EventModal helper features
+            thumb: p.thumb,
+            // @ts-ignore
+            repeatDays: p.repeatDays,
+            // @ts-ignore
+            repeatUntil: p.repeatUntil,
+            // @ts-ignore
+            repeatEveryWeeks: p.repeatEveryWeeks,
+          } as any);
+        }}
+      />
     </>
   );
 }
