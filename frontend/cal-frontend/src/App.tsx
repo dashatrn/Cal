@@ -4,13 +4,13 @@ import dayGridPlugin from "@fullcalendar/daygrid";
 import timeGridPlugin from "@fullcalendar/timegrid";
 import interactionPlugin from "@fullcalendar/interaction";
 import type { DateClickArg, EventResizeDoneArg } from "@fullcalendar/interaction";
-
 import type {
   EventDropArg,
   EventClickArg,
   EventInput,
   EventContentArg,
 } from "@fullcalendar/core";
+
 import { listEvents, updateEvent, BASE_URL } from "./api";
 import type { EventOut as ApiEvent, EventIn } from "./api";
 import EventModal from "./EventModal";
@@ -21,10 +21,6 @@ import "./App.css";
 
 type CalEvent = Omit<ApiEvent, "id"> & { id: string };
 
-const HEADER_H = 220; // approximate header height (plaque + monthbar)
-const TOOLBAR_H = 0;  // internal toolbar removed
-const EXTRA_PAD = 0;  // no obvious bottom space
-
 const LS_VIEW = "cal:view";
 const LS_DATE = "cal:date";
 
@@ -33,23 +29,26 @@ const DOW_FMT = ["SUN.", "MON.", "TUES.", "WED.", "THUR.", "FRI.", "SAT."] as co
 
 function headerLabel(date: Date, viewType: string) {
   const dow = DOW_FMT[date.getDay()];
-  if (viewType === "dayGridMonth") {
-    return dow; // e.g., SUN.
-  }
+  if (viewType === "dayGridMonth") return dow;
   const mm = String(date.getMonth() + 1).padStart(2, "0");
   const dd = String(date.getDate()).padStart(2, "0");
-  return `${dow} ${mm}/${dd}`; // e.g., WED. 02/26
+  return `${dow} ${mm}/${dd}`;
 }
 
-// SVG arrow that matches the mock (solid red arrow inside a round beige button)
+// SVG arrow (red, solid) inside the round beige button
 function ArrowSVG({ dir }: { dir: "left" | "right" }) {
   const transform = dir === "left" ? "scale(-1,1) translate(-56,0)" : undefined;
   return (
-    <svg width="32" height="32" viewBox="0 0 56 56" aria-hidden focusable="false" className="v-arrow">
+    <svg
+      width="56"
+      height="56"
+      viewBox="0 0 56 56"
+      aria-hidden
+      focusable="false"
+      className="v-arrow"
+    >
       <g transform={transform}>
-        {/* shaft */}
-        <rect x="12" y="25" width="24" height="6" rx="3" />
-        {/* head */}
+        <rect x="10" y="25" width="26" height="6" rx="3" />
         <path d="M34 14 L48 28 L34 42 Z" />
       </g>
     </svg>
@@ -61,20 +60,15 @@ export default function App() {
   const [modalInit, setModalInit] = useState<ApiEvent | undefined | null>(null);
   const [showNew, setShowNew] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
-  const [vh, setVh] = useState<number>(typeof window !== "undefined" ? window.innerHeight : 800);
+
   const calRef = useRef<FullCalendar | null>(null);
   const toolsRef = useRef<HTMLDivElement | null>(null);
 
-  // anchor date for large header (Month + Year)
+  // anchor date for Month + Year plaque row
   const [anchor, setAnchor] = useState<Date>(new Date());
   const monthName = anchor.toLocaleString("en-US", { month: "long" }).toUpperCase();
   const year = anchor.getFullYear();
 
-  const gotoDate = (iso: string) => calRef.current?.getApi().gotoDate(iso);
-  const gotoPrev = () => calRef.current?.getApi().prev();
-  const gotoNext = () => calRef.current?.getApi().next();
-
-  // range-aware reload
   const reload = (start?: string, end?: string) =>
     listEvents(start, end)
       .then((api) => {
@@ -104,17 +98,6 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // height recompute on resize
-  useEffect(() => {
-    const onResize = () => {
-      setVh(window.innerHeight);
-      calRef.current?.getApi().updateSize();
-    };
-    setTimeout(onResize, 0);
-    window.addEventListener("resize", onResize);
-    return () => window.removeEventListener("resize", onResize);
-  }, []);
-
   // close dropdown when clicking outside
   useEffect(() => {
     const onDoc = (e: MouseEvent) => {
@@ -134,12 +117,10 @@ export default function App() {
   const openEdit = (evt: ApiEvent) => setModalInit(evt);
 
   const handleSaved = (e: ApiEvent | undefined, _mode?: "create" | "update" | "delete") => {
-    if (e) gotoDate(e.start);
+    if (e) calRef.current?.getApi().gotoDate(e.start);
     reload();
     setModalInit(null);
   };
-
-  const CAL_HEIGHT = Math.max(320, vh - HEADER_H - TOOLBAR_H - EXTRA_PAD);
 
   // ---------- ICS export for visible range (kept for future use) ----------
   const exportICS = () => {
@@ -147,7 +128,9 @@ export default function App() {
     if (!api) return;
     const start = api.view.activeStart.toISOString();
     const end = api.view.activeEnd.toISOString();
-    const url = `${BASE_URL}/events.ics?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`;
+    const url = `${BASE_URL}/events.ics?start=${encodeURIComponent(start)}&end=${encodeURIComponent(
+      end
+    )}`;
     window.open(url, "_blank");
   };
 
@@ -169,25 +152,18 @@ export default function App() {
   async function applyUpdateOrSuggest(fcEvent: any, revert: () => void) {
     const id = Number(fcEvent.id);
     const payload = buildPayloadFromEvent(fcEvent);
-
     try {
       await updateEvent(id, payload);
-      reload(); // reflect changes
+      reload();
     } catch (_err: any) {
-      // on conflict just revert — advanced "suggest next" lives in modal flow
       revert();
     }
   }
 
-  const onEventDrop = async (arg: EventDropArg) => {
-    await applyUpdateOrSuggest(arg.event, arg.revert);
-  };
+  const onEventDrop = async (arg: EventDropArg) => applyUpdateOrSuggest(arg.event, arg.revert);
+  const onEventResize = async (arg: EventResizeDoneArg) =>
+    applyUpdateOrSuggest(arg.event, arg.revert);
 
-  const onEventResize = async (arg: EventResizeDoneArg) => {
-    await applyUpdateOrSuggest(arg.event, arg.revert);
-  };
-
-  // Nice compact event rendering: title + (location)
   const renderEvent = (arg: EventContentArg) => {
     const loc = arg.event.extendedProps?.location as string | undefined;
     const root = document.createElement("div");
@@ -196,7 +172,6 @@ export default function App() {
     title.style.fontWeight = "600";
     title.style.fontSize = "0.82rem";
     root.appendChild(title);
-
     if (loc) {
       const el = document.createElement("div");
       el.textContent = loc;
@@ -209,16 +184,16 @@ export default function App() {
 
   return (
     <>
-      {/* Left/Right arrows floating outside paper */}
-      <button className="v-nav v-nav-left" onClick={gotoPrev} aria-label="Previous week">
-        <ArrowSVG dir="left" />
-      </button>
-      <button className="v-nav v-nav-right" onClick={gotoNext} aria-label="Next week">
-        <ArrowSVG dir="right" />
-      </button>
-
       {/* OUTER PAPER */}
       <div className="v-paper">
+        {/* Left/Right arrows — placed relative to the paper so they sit tight to the edges */}
+        <button className="v-nav v-nav-left" onClick={() => calRef.current?.getApi().prev()} aria-label="Previous week">
+          <ArrowSVG dir="left" />
+        </button>
+        <button className="v-nav v-nav-right" onClick={() => calRef.current?.getApi().next()} aria-label="Next week">
+          <ArrowSVG dir="right" />
+        </button>
+
         {/* Top-left toolbox button (inside the page, to the left of the calendar) */}
         <div ref={toolsRef} className="v-tools">
           <button
@@ -227,7 +202,6 @@ export default function App() {
             aria-label="Calendar tools"
             onClick={() => setMenuOpen((v) => !v)}
           >
-            {/* toolbox icon */}
             <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden>
               <rect x="3" y="8" width="18" height="10" rx="2" />
               <path
@@ -303,17 +277,18 @@ export default function App() {
         </div>
 
         {/* Calendar */}
-        <main className="relative flex-1 min-h-0 px-0 pb-0">
+        <main className="relative px-0 pb-0">
           <FullCalendar
             ref={calRef}
             plugins={[dayGridPlugin, timeGridPlugin, interactionPlugin]}
             initialView="timeGridWeek"
             headerToolbar={false}
-            allDaySlot={false} // ← remove ALL-DAY row to match mock
-            slotDuration="01:00:00" // ← hourly rows (no dotted half-hours)
-            slotLabelInterval="01:00" // ← show one label per hour
+            allDaySlot={false}
+            slotDuration="01:00:00"
+            slotLabelInterval="01:00"
             timeZone="local"
-            height={CAL_HEIGHT}
+            height="auto"               // ← natural height; page ends right after grid
+            contentHeight="auto"
             eventDisplay="block"
             events={events as EventInput[]}
             editable={true}
@@ -326,15 +301,12 @@ export default function App() {
               const bits = [loc, desc].filter(Boolean);
               if (bits.length) info.el.title = bits.join("\n\n");
             }}
-            /* ——— The three lines below produce your desired time axis ——— */
-            scrollTime="00:00:00" // don’t auto-scroll to 6am
-            slotMinTime="00:00:00" // show hours starting at midnight
-            slotMaxTime="24:00:00" // show full day
-            /* Label format like “12AM, 1AM, …” (no minutes) */
+            scrollTime="00:00:00"
+            slotMinTime="00:00:00"
+            slotMaxTime="24:00:00"
             slotLabelFormat={[{ hour: "numeric", meridiem: "short" }]}
-            /* Day headers to match mockups (SUN. 02/23 etc.) */
             dayHeaderContent={(args) => headerLabel(args.date, args.view.type)}
-            firstDay={0} // Sunday
+            firstDay={0}
             dateClick={(arg: DateClickArg) => openCreate(arg.dateStr)}
             eventClick={(arg: EventClickArg) => {
               const e = events.find((x) => x.id === arg.event.id);
@@ -345,11 +317,9 @@ export default function App() {
               const current = calRef.current?.getApi().getDate();
               if (current) {
                 localStorage.setItem(LS_DATE, current.toISOString());
-                setAnchor(current); // keep header in sync
+                setAnchor(current);
               }
-              const startStr = arg.startStr;
-              const endStr = arg.endStr;
-              reload(startStr, endStr);
+              reload(arg.startStr, arg.endStr);
             }}
           />
         </main>
@@ -363,7 +333,6 @@ export default function App() {
         />
       )}
 
-      {/* New → parse (text/image) → hand off to EventModal */}
       <NewEventModal
         open={showNew}
         onClose={() => setShowNew(false)}
@@ -371,7 +340,6 @@ export default function App() {
           setShowNew(false);
           const start = p.start ?? new Date().toISOString();
           const end = p.end ?? new Date(Date.now() + 60 * 60 * 1000).toISOString();
-          // pass pre-parsed fields through; EventModal understands these extras
           setModalInit({
             id: 0,
             title: p.title ?? "",
