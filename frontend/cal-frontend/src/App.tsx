@@ -23,6 +23,9 @@ type CalEvent = Omit<ApiEvent, "id"> & { id: string };
 
 const LS_VIEW = "cal:view";
 const LS_DATE = "cal:date";
+const LS_FRAME = "cal:frame-mode";
+
+type FrameMode = "attached" | "floating";
 
 // Custom DOW labels to match your artwork (TUES., THUR., etc.)
 const DOW_FMT = ["SUN.", "MON.", "TUES.", "WED.", "THUR.", "FRI.", "SAT."] as const;
@@ -63,6 +66,15 @@ export default function App() {
   const monthName = anchor.toLocaleString("en-US", { month: "long" }).toUpperCase();
   const year = anchor.getFullYear();
 
+  // track current FC view type to drive floating borders (month vs week/day)
+  const [viewType, setViewType] = useState<string>("timeGridWeek");
+
+  // frame mode (attached vs floating) — persisted
+  const [frameMode, setFrameMode] = useState<FrameMode>(() => {
+    const saved = (typeof window !== "undefined" && localStorage.getItem(LS_FRAME)) as FrameMode | null;
+    return saved === "floating" ? "floating" : "attached";
+  });
+
   const gotoDate = (iso: string) => calRef.current?.getApi().gotoDate(iso);
   const gotoPrev = () => calRef.current?.getApi().prev();
   const gotoNext = () => calRef.current?.getApi().next();
@@ -90,6 +102,7 @@ export default function App() {
         if (savedView) api.changeView(savedView);
         if (savedDate) api.gotoDate(savedDate);
         else if (loaded.length) api.gotoDate(loaded[loaded.length - 1]!.start);
+        setViewType(api?.view?.type || "timeGridWeek");
       }
       const current = api?.getDate();
       if (current) setAnchor(current);
@@ -194,6 +207,15 @@ export default function App() {
     return { domNodes: [root] };
   };
 
+  // classes to control floating/attached and view-specific borders
+  const frameClass = frameMode === "floating" ? "is-floating" : "is-attached";
+  const viewClass =
+    viewType === "dayGridMonth"
+      ? "view-month"
+      : viewType === "timeGridDay"
+      ? "view-day"
+      : "view-week";
+
   return (
     <>
       {/* OUTER PAPER */}
@@ -273,6 +295,28 @@ export default function App() {
               >
                 + New
               </button>
+
+              {/* NEW: frame mode */}
+              <button
+                className="v-menu-item"
+                onClick={() => {
+                  setFrameMode("attached");
+                  localStorage.setItem(LS_FRAME, "attached");
+                  setMenuOpen(false);
+                }}
+              >
+                Attached
+              </button>
+              <button
+                className="v-menu-item"
+                onClick={() => {
+                  setFrameMode("floating");
+                  localStorage.setItem(LS_FRAME, "floating");
+                  setMenuOpen(false);
+                }}
+              >
+                Floating
+              </button>
             </div>
           )}
         </div>
@@ -290,7 +334,7 @@ export default function App() {
         </div>
 
         {/* Calendar */}
-        <main className="relative flex-1 min-h-0 px-0 pb-0">
+        <main className={`relative flex-1 min-h-0 px-0 pb-0 ${frameClass} ${viewClass}`}>
           <FullCalendar
             ref={calRef}
             plugins={[dayGridPlugin, timeGridPlugin, interactionPlugin]}
@@ -326,15 +370,19 @@ export default function App() {
               if (e) openEdit({ ...e, id: +e.id });
             }}
             datesSet={(arg) => {
+              // persist view/date
               localStorage.setItem(LS_VIEW, arg.view.type);
               const current = calRef.current?.getApi().getDate();
               if (current) {
                 localStorage.setItem(LS_DATE, current.toISOString());
                 setAnchor(current); // keep header in sync
               }
+              // keep events in range
               const startStr = arg.startStr;
               const endStr = arg.endStr;
               reload(startStr, endStr);
+              // track view type for floating border logic
+              setViewType(arg.view.type);
             }}
           />
         </main>

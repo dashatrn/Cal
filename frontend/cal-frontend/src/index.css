@@ -160,8 +160,7 @@ html, body {
 
 /* Heavy borders everywhere (match mock) */
 .fc-theme-standard .fc-scrollgrid { border: 4px solid var(--ink); }
-/* Keep only the TOP border of the grid
-   (prevents thick double edge where the grid meets the outer paper border) */
+/* Keep only the TOP border of the grid by default (ATTACHED mode baseline) */
 .v-paper .fc-theme-standard .fc-scrollgrid {
   border-left: 0 !important;
   border-right: 0 !important;
@@ -226,3 +225,30 @@ html, body {
 
 /* keep selection/resizer visible on red */
 .fc-event .fc-resizer { background: #000; }
+
+/* ─────────────────────────────────────────────────────────────────── */
+/*                ATTACHED vs FLOATING (new toggle)                    */
+/* ─────────────────────────────────────────────────────────────────── */
+
+/* Attached: same as current (no extra margins) */
+.v-paper > main.is-attached .fc { margin: 0; }
+
+/* Floating: shrink the inner calendar with clear margin on L / R / bottom.
+   Small top margin keeps it tucked under the month row */
+.v-paper > main.is-floating .fc {
+  margin: 8px 24px 24px 24px;  /* top, right, bottom, left */
+}
+
+/* Floating + MONTH:
+   Keep only TOP border (already the base rule). Nothing else needed. */
+
+/* Floating + WEEK or DAY:
+   Keep TOP + LEFT borders, remove RIGHT + BOTTOM.
+   (Overrides the baseline that removed left in attached mode.) */
+.v-paper > main.is-floating.view-week .fc-theme-standard .fc-scrollgrid,
+.v-paper > main.is-floating.view-day  .fc-theme-standard .fc-scrollgrid {
+  border-left: 4px solid var(--ink) !important;
+  border-right: 0 !important;
+  border-bottom: 0 !important;
+  border-top: 4px solid var(--ink) !important;
+}
