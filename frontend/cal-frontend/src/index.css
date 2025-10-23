@@ -144,7 +144,7 @@ html, body {
 /* Heavy borders everywhere (match mock) */
 .fc-theme-standard .fc-scrollgrid { border: 4px solid var(--ink); }
 .fc-theme-standard td,
-.fc-theme-standard th { border: 1px solid var(--ink); }
+.fc-theme-standard th { border: 2px solid var(--ink); }
 
 /* Remove stray bottom margin under grid harness (prevents tan gap) */
 .fc .fc-view-harness { margin-bottom: 0 !important; }
