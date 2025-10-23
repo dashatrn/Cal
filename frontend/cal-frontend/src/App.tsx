@@ -21,10 +21,6 @@ import "./App.css";
 
 type CalEvent = Omit<ApiEvent, "id"> & { id: string };
 
-const HEADER_H = 220; // approximate header height (plaque + monthbar)
-const TOOLBAR_H = 0;  // internal toolbar removed
-const EXTRA_PAD = 0;  // no obvious bottom space
-
 const LS_VIEW = "cal:view";
 const LS_DATE = "cal:date";
 
@@ -59,7 +55,6 @@ export default function App() {
   const [modalInit, setModalInit] = useState<ApiEvent | undefined | null>(null);
   const [showNew, setShowNew] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
-  const [vh, setVh] = useState<number>(typeof window !== "undefined" ? window.innerHeight : 800);
   const calRef = useRef<FullCalendar | null>(null);
   const toolsRef = useRef<HTMLDivElement | null>(null);
 
@@ -102,12 +97,9 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // height recompute on resize
+  // ask FullCalendar to recompute sizes on window resize
   useEffect(() => {
-    const onResize = () => {
-      setVh(window.innerHeight);
-      calRef.current?.getApi().updateSize();
-    };
+    const onResize = () => calRef.current?.getApi().updateSize();
     setTimeout(onResize, 0);
     window.addEventListener("resize", onResize);
     return () => window.removeEventListener("resize", onResize);
@@ -136,8 +128,6 @@ export default function App() {
     reload();
     setModalInit(null);
   };
-
-  const CAL_HEIGHT = Math.max(320, vh - HEADER_H - TOOLBAR_H - EXTRA_PAD);
 
   // ---------- ICS export for visible range (kept for future use) ----------
   const exportICS = () => {
@@ -208,7 +198,7 @@ export default function App() {
     <>
       {/* OUTER PAPER */}
       <div className="v-paper">
-        {/* Left/Right arrows — now positioned relative to the paper, close to the edge */}
+        {/* Left/Right arrows — unchanged */}
         <button className="v-nav v-nav-left" onClick={gotoPrev} aria-label="Previous period">
           <ArrowSVG dir="left" />
         </button>
@@ -216,7 +206,7 @@ export default function App() {
           <ArrowSVG dir="right" />
         </button>
 
-        {/* Top-left toolbox button (inside the page, to the left of the calendar) */}
+        {/* Top-left toolbox button */}
         <div ref={toolsRef} className="v-tools">
           <button
             type="button"
@@ -306,11 +296,12 @@ export default function App() {
             plugins={[dayGridPlugin, timeGridPlugin, interactionPlugin]}
             initialView="timeGridWeek"
             headerToolbar={false}
-            allDaySlot={false} // ← remove ALL-DAY row to match mock
-            slotDuration="01:00:00" // ← hourly rows (no dotted half-hours)
-            slotLabelInterval="01:00" // ← show one label per hour
+            allDaySlot={false}
+            slotDuration="01:00:00"
+            slotLabelInterval="01:00"
             timeZone="local"
-            height={CAL_HEIGHT}
+            /* 👇 fill the grid row completely — removes bottom blank space */
+            height="100%"
             eventDisplay="block"
             events={events as EventInput[]}
             editable={true}
