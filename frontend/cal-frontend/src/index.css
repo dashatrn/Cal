@@ -34,7 +34,7 @@ html, body {
 /* Paper container (outer frame) */
 .v-paper {
   /* 👇 wider calendar, closer to arrows */
-  max-width: 1368px;
+  max-width: 1320px;
   margin: 0 auto;
   background: var(--paper);
   border: 6px solid var(--ink);
@@ -144,6 +144,14 @@ html, body {
 
 /* Heavy borders everywhere (match mock) */
 .fc-theme-standard .fc-scrollgrid { border: 4px solid var(--ink); }
+/* Keep only the TOP border of the grid
+   (prevents thick double edge where the grid meets the outer paper border) */
+.v-paper .fc-theme-standard .fc-scrollgrid {
+  border-left: 0 !important;
+  border-right: 0 !important;
+  border-bottom: 0 !important;
+  border-top: 4px solid var(--ink) !important; /* line just under the month row */
+}
 .fc-theme-standard td,
 .fc-theme-standard th { border: 2px solid var(--ink); }
 
