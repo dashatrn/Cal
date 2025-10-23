@@ -23,6 +23,12 @@ html, body, #root { min-height: 100%; }
   /* nav sizing (tuned to mock) */
   --nav-diam: 92px;           /* circle diameter */
   --nav-edge-offset: -102px;  /* how far past the paper edge (negative=outside) */
+
+
+  /* sizing for the tan paper */
+  --paper-max: 1216px;   /* a little smaller than before */
+  --edge-gap:  120px;    /* keeps the paper away from the arrows at 100% */
+
 }
 
 html, body {
@@ -34,8 +40,7 @@ html, body {
 /* Paper container (outer frame) */
 .v-paper {
   /* 👇 wider calendar, closer to arrows */
-  max-width: 1280px;
-  margin: 0 auto;
+  width: min(var(--paper-max), calc(100vw - var(--edge-gap) * 2));  margin: 0 auto;
   background: var(--paper);
   border: 6px solid var(--ink);
   box-sizing: border-box;
