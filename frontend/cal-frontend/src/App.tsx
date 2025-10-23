@@ -21,14 +21,15 @@ import "./App.css";
 
 type CalEvent = Omit<ApiEvent, "id"> & { id: string };
 
-const HEADER_H = 212; // slightly tighter plaque + monthbar
+/** Header block (plaque + month bar) height used in our dynamic calendar height */
+const HEADER_H = 196; // tighter to remove bottom gap
 const TOOLBAR_H = 0;
 const EXTRA_PAD = 0;
 
 const LS_VIEW = "cal:view";
 const LS_DATE = "cal:date";
 
-// DOW labels to match artwork
+/** Day-of-week labels to match your art */
 const DOW_FMT = ["SUN.", "MON.", "TUES.", "WED.", "THUR.", "FRI.", "SAT."] as const;
 
 function headerLabel(date: Date, viewType: string) {
@@ -39,11 +40,11 @@ function headerLabel(date: Date, viewType: string) {
   return `${dow} ${mm}/${dd}`;
 }
 
-// Bigger arrow glyph to match mock
+/** Larger arrow glyph */
 function ArrowSVG({ dir }: { dir: "left" | "right" }) {
   const transform = dir === "left" ? "scale(-1,1) translate(-64,0)" : undefined;
   return (
-    <svg width="56" height="56" viewBox="0 0 64 56" aria-hidden focusable="false" className="v-arrow">
+    <svg width="64" height="64" viewBox="0 0 64 56" aria-hidden focusable="false" className="v-arrow">
       <g transform={transform}>
         <rect x="10" y="24" width="30" height="8" rx="4" />
         <path d="M40 12 L58 28 L40 44 Z" />
@@ -61,14 +62,14 @@ export default function App() {
   const calRef = useRef<FullCalendar | null>(null);
   const toolsRef = useRef<HTMLDivElement | null>(null);
 
-  // anchor date for Month + Year plaque
+  // Anchor date for Month + Year plaque row
   const [anchor, setAnchor] = useState<Date>(new Date());
   const monthName = anchor.toLocaleString("en-US", { month: "long" }).toUpperCase();
   const year = anchor.getFullYear();
 
-  const gotoDate = (iso: string) => calRef.current?.getApi().gotoDate(iso);
   const gotoPrev = () => calRef.current?.getApi().prev();
   const gotoNext = () => calRef.current?.getApi().next();
+  const gotoDate = (iso: string) => calRef.current?.getApi().gotoDate(iso);
 
   const reload = (start?: string, end?: string) =>
     listEvents(start, end)
@@ -91,9 +92,8 @@ export default function App() {
         if (savedView) api.changeView(savedView);
         if (savedDate) api.gotoDate(savedDate);
         else if (loaded.length) api.gotoDate(loaded[loaded.length - 1]!.start);
+        setAnchor(api.getDate());
       }
-      const current = api?.getDate();
-      if (current) setAnchor(current);
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -132,15 +132,6 @@ export default function App() {
   };
 
   const CAL_HEIGHT = Math.max(320, vh - HEADER_H - TOOLBAR_H - EXTRA_PAD);
-
-  const exportICS = () => {
-    const api = calRef.current?.getApi();
-    if (!api) return;
-    const start = api.view.activeStart.toISOString();
-    const end = api.view.activeEnd.toISOString();
-    const url = `${BASE_URL}/events.ics?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`;
-    window.open(url, "_blank");
-  };
 
   const buildPayloadFromEvent = (fc: any): EventIn => {
     const ext = fc.extendedProps || {};
@@ -187,7 +178,7 @@ export default function App() {
       const el = document.createElement("div");
       el.textContent = loc;
       el.style.fontSize = "0.72rem";
-      el.style.opacity = "0.8";
+      el.style.opacity = "0.85";
       root.appendChild(el);
     }
     return { domNodes: [root] };
@@ -196,7 +187,7 @@ export default function App() {
   return (
     <>
       <div className="v-paper">
-        {/* bigger + closer arrows */}
+        {/* big, close arrows */}
         <button className="v-nav v-nav-left" onClick={gotoPrev} aria-label="Previous period">
           <ArrowSVG dir="left" />
         </button>
@@ -230,6 +221,7 @@ export default function App() {
               <button className="v-menu-item" onClick={() => { calRef.current?.getApi().changeView("timeGridWeek"); setMenuOpen(false); }}>Week</button>
               <button className="v-menu-item" onClick={() => { calRef.current?.getApi().changeView("dayGridMonth"); setMenuOpen(false); }}>Month</button>
               <button className="v-menu-item" onClick={() => { setMenuOpen(false); setShowNew(true); }}>+ New</button>
+              <a className="v-menu-item" href={`${BASE_URL}/events.ics`} target="_blank">Export .ics</a>
             </div>
           )}
         </div>
@@ -314,7 +306,8 @@ export default function App() {
             title: p.title ?? "",
             start,
             end,
-            // @ts-ignore extras for EventModal helper features
+            // extras for EventModal helper features
+            // @ts-ignore
             thumb: p.thumb,
             // @ts-ignore
             repeatDays: p.repeatDays,

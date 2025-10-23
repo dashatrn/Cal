@@ -1,190 +1,203 @@
-/* src/index.css */
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
-
-html.dark { color-scheme: dark; }
-html, body, #root { min-height: 100%; }
-#root { max-width: none; margin: 0; padding: 0; }
-
-/* ─────────────── Color + sizing tokens tuned to the mock ─────────────── */
+/* ---------- Root & palette (match the mock) ---------- */
 :root{
-  --paper: #c2af88;   /* tan (closer to mock) */
-  --ink:   #000000;   /* black */
-  --rail:  #2f2b24;   /* side rails */
-  --accent:#B33924;   /* dark red for month + events (exact match) */
-  --bevel: #e9dec7;   /* light bevel on nav */
-  --navface:#cfb78f;  /* nav face */
-  --navring:#8c7a59;  /* nav ring */
-
-  /* bigger + closer arrows */
-  --nav-diam: 112px;
-  --nav-edge-offset: -78px; /* negative pushes into the rail; smaller = closer to paper */
+  --bg: #2a2621;            /* charcoal page backdrop */
+  --paper: #c6b391;         /* tan paper */
+  --ink: #121212;           /* line/border black */
+  --accent-red: #c1432f;    /* OCTOBER + event fill (tweak if you need) */
+  --button-beige: #dfcfb3;  /* nav button face */
+  --button-shadow: #8b7756; /* nav button drop */
+  --grid: #121212;          /* grid lines */
 }
 
-html, body {
-  background: var(--rail);
-  font-family: "Times New Roman", Times, serif;
+* { box-sizing: border-box; }
+
+html, body, #root{
+  height:100%;
+}
+html, body{
+  margin:0;
+  background: var(--bg);
+  font-family: ui-serif, Georgia, "Times New Roman", Times, serif;
   color: var(--ink);
 }
 
-/* ─────────────── Paper frame ─────────────── */
-.v-paper {
-  max-width: 1160px;
+/* ---------- Paper + Header plaque ---------- */
+.v-paper{
+  width: 1120px;
+  max-width: 92vw;
+  min-height: 100vh;      /* eliminate stray bottom gap */
   margin: 0 auto;
   background: var(--paper);
-  border: 6px solid var(--ink);
-  box-sizing: border-box;
-  min-height: 100vh;
-  display: grid;
-  grid-template-rows: auto auto 1fr; /* plaque, monthbar, calendar */
+  border: 4px solid var(--ink);
   position: relative;
+  display: flex;
+  flex-direction: column;
 }
 
-/* Plaque */
-.v-plaque {
-  margin: 18px 56px 8px;              /* slightly tighter */
+/* Rounded plaque with 'Cal' */
+.v-plaque{
+  margin: 18px 54px 8px 54px;
+  height: 74px;
   border: 5px solid var(--ink);
-  border-radius: 28px;
-  height: 86px;
+  border-radius: 26px;
   display: grid;
   place-items: center;
+  background: transparent;
 }
-.v-cal-logo {
+.v-cal-logo{
   font-family: "Alex Brush", cursive;
-  font-size: 64px;
+  font-size: 56px;
   line-height: 1;
+  margin-top: 2px;
 }
 
-/* Month title row */
-.v-monthbar {
-  display: grid;
-  grid-template-columns: 1fr auto 1fr;
-  align-items: center;
-  padding: 4px 44px 6px;              /* reduce bottom space */
+/* Month row: YEAR — MONTH — YEAR */
+.v-monthbar{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  padding: 0 220px;           /* keeps the month centered like your art */
+  height: 64px;
+  border-bottom: 0;           /* grid draws its own border */
 }
-.v-year { font-weight: 700; font-size: 44px; text-align: center; }
-.v-month {
-  font-weight: 800;
-  font-size: 64px;
-  letter-spacing: .06em;
-  color: var(--accent);
-  text-transform: uppercase;
-  text-align: center;
-}
-
-/* Toolbox (stays) */
-.v-tools {
-  position: absolute;
-  top: 122px;
-  left: 22px;
-  z-index: 6;
-}
-.v-toolbtn {
-  width: 42px; height: 42px;
-  display: grid; place-items: center;
-  background: radial-gradient(115% 115% at 30% 25%, var(--bevel) 0%, var(--navface) 55%, #b79f75 100%);
-  border: 2px solid var(--navring);
-  border-radius: 10px;
-  box-shadow: inset 0 0 0 2px rgba(0,0,0,.12);
-  color: var(--accent);
-  cursor: pointer;
-}
-.v-menu {
-  position: absolute;
-  top: 48px; left: 0;
-  background: var(--paper);
-  border: 3px solid var(--ink);
-  box-shadow: 0 4px 0 rgba(0,0,0,.35);
-  padding: 6px;
-  width: 180px;
-}
-.v-menu-item {
-  width: 100%;
-  text-align: left;
-  padding: 6px 10px;
-  margin: 4px 0;
-  border: 2px solid var(--ink);
-  background: #fff;
+.v-year{
+  font-size: 36px;
   font-weight: 700;
 }
-.v-menu-item:active { transform: translateY(1px); }
+.v-month{
+  font-size: 40px;
+  letter-spacing: 2px;
+  font-weight: 800;
+  color: var(--accent-red);
+}
 
-/* Outside nav arrows */
-.v-nav {
+/* ---------- Big nav buttons tight to edges ---------- */
+.v-nav{
   position: absolute;
-  top: 50%;
+  top: 45%;
   transform: translateY(-50%);
-  width: var(--nav-diam);
-  height: var(--nav-diam);
-  border-radius: 999px;
-  background: radial-gradient(115% 115% at 30% 25%, var(--bevel) 0%, var(--navface) 55%, #b79f75 100%);
-  box-shadow:
-    0 4px 0 rgba(0,0,0,.35),
-    inset 0 0 0 2px rgba(0,0,0,.12);
-  border: 2px solid var(--navring);
-  display: grid; place-content: center;
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  border: 3px solid var(--ink);
+  background: var(--button-beige);
+  box-shadow: 0 6px 0 0 var(--button-shadow);
+  display: grid;
+  place-items: center;
   cursor: pointer;
-  z-index: 5;
-  user-select: none;
 }
-.v-nav-left  { left: var(--nav-edge-offset); }
-.v-nav-right { right: var(--nav-edge-offset); }
-.v-nav:hover { filter: brightness(1.02); }
-.v-arrow rect, .v-arrow path { fill: var(--accent); }
+.v-nav-left{  left: -28px;  }  /* close to paper edge like mock */
+.v-nav-right{ right: -28px;  }
+.v-nav:active{ transform: translateY(calc(-50% + 2px)); box-shadow: 0 4px 0 0 var(--button-shadow); }
+.v-arrow rect, .v-arrow path{ fill: var(--ink); }
 
-/* ─────────────── FullCalendar styling to match mock ─────────────── */
-.fc { background: var(--paper); }
+/* ---------- Toolbox button & dropdown ---------- */
+.v-tools{
+  position: absolute;
+  left: 18px;
+  top: 18px;
+}
+.v-toolbtn{
+  width: 34px; height: 34px;
+  border-radius: 8px;
+  border: 2px solid var(--ink);
+  background: var(--button-beige);
+  color: var(--ink);
+  display: grid; place-items: center;
+}
+.v-menu{
+  position: absolute;
+  top: 42px; left: 0;
+  background: var(--paper);
+  border: 2px solid var(--ink);
+  min-width: 160px;
+  box-shadow: 3px 3px 0 var(--button-shadow);
+}
+.v-menu-item{
+  display:block;
+  width:100%;
+  padding: 10px 12px;
+  text-align:left;
+  background: transparent;
+  border:0;
+  cursor:pointer;
+  font-size: 14px;
+}
+.v-menu-item:hover{ background: #e6d7b9; }
 
-/* outer ledger border a bit lighter than paper frame; inner lines heavy */
-.fc-theme-standard .fc-scrollgrid { border: 3px solid var(--ink); }
-.fc-theme-standard td,
-.fc-theme-standard th { border: 2px solid var(--ink); }
+/* ---------- FullCalendar theming to match mock ---------- */
+.fc, .fc .fc-scrollgrid,
+.fc .fc-daygrid, .fc .fc-timegrid{
+  background: var(--paper);
+}
 
-/* remove any extra gap below the grid */
-.fc .fc-view-harness { margin-bottom: 0 !important; }
-.fc .fc-scroller-harness,
-.fc .fc-scroller-harness-liquid { margin-bottom: 0 !important; }
-.fc .fc-scrollgrid-section-footer { display: none !important; } /* kills bottom tan bar */
+/* outer grid border */
+.fc-theme-standard .fc-scrollgrid{
+  border: 4px solid var(--ink);
+}
 
-/* column headers */
-.fc .fc-col-header { background: transparent; }
-.fc .fc-col-header-cell-cushion {
+/* vertical & horizontal lines */
+.fc-theme-standard td, .fc-theme-standard th{
+  border-color: var(--grid);
+  border-width: 2px;
+}
+
+/* day header (SUN. 10/19) */
+.fc .fc-col-header{
+  border-bottom: 2px solid var(--ink);
+}
+.fc .fc-col-header-cell-cushion{
+  padding: 8px 0 10px;
+  text-decoration: none;
+  color: var(--ink);
   font-weight: 800;
+  letter-spacing: 0.5px;
+  font-size: 16px;
+}
+
+/* time axis: 12AM, 1AM … */
+.fc .fc-timegrid-axis{
+  width: 84px;
+}
+.fc .fc-timegrid-axis-cushion{
   text-transform: uppercase;
-  letter-spacing: .02em;
-  padding: 6px 6px; /* a touch tighter */
+  font-weight: 700;
+  letter-spacing: 0.5px;
 }
 
-/* month day numbers; keep up-right */
-.fc .fc-daygrid-day-top { justify-content: flex-end; padding-right: 8px; }
-.fc .fc-daygrid-day-number { color: #000; font-weight: 700; }
-
-/* time grid slot heights + labels */
-.fc .fc-timegrid-slot { height: 56px; }
-.fc .fc-timegrid-axis-cushion,
-.fc .fc-timegrid-slot-label {
-  font-weight: 800;
-  text-transform: uppercase;
+/* rows are slightly taller (mock spacing) */
+.fc .fc-timegrid-slot{
+  height: 56px; /* 1 hour */
 }
 
-/* no highlight for today */
-.fc .fc-day-today { background: transparent !important; }
-/* no weekend shading */
-.fc .fc-day-sat, .fc .fc-day-sun { background: transparent; }
-/* hide default toolbar (we render our own) */
-.fc .fc-toolbar { display: none !important; }
-/* remove minor dotted lines */
-.fc .fc-timegrid-slot-minor { border-top: none !important; }
-
-/* events: solid dark red, black outline, square corners */
-.fc-event,
-.fc-daygrid-event,
-.fc-timegrid-event,
-.fc-event .fc-event-main {
-  background: var(--accent) !important;
-  color: #fff !important;
-  border: 2px solid #000 !important;
-  border-radius: 0 !important;
+/* remove built-in rounded event corners; strong black outline */
+.fc .fc-timegrid-event{
+  border: 3px solid var(--ink) !important;
+  border-radius: 2px !important;
+  background: linear-gradient(180deg, #b53b2e 0%, #a4362b 100%) !important;
+  color: #f7efe7 !important;
+  box-shadow: inset 0 0 0 2px rgba(255,255,255,0.08);
+  padding: 4px 6px !important;
 }
-.fc-event .fc-resizer { background: #000; }
+.fc .fc-event-title{
+  font-weight: 700;
+  font-size: 13px;
+}
+
+/* keep scroller tight; no extra bottom space */
+.fc-scroller{
+  overflow-y: auto !important;
+}
+main{ min-height: 0; }
+
+/* month (dayGrid) also uses the same grid lines */
+.fc-daygrid-day-number{
+  color: var(--ink);
+  font-weight: 700;
+}
+
+/* ensure no stray padding/margins add a tan bar at bottom */
+.v-paper > main{ padding-bottom: 0; }
+
+/* hide FullCalendar’s default outline on click for a cleaner mock look */
+.fc .fc-daygrid-day-frame, .fc .fc-timegrid-slot { outline: none; }
