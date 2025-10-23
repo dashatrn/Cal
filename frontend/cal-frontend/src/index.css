@@ -296,11 +296,11 @@ html, body {
 }
 
 /* ── FINAL SWEEP: kill any remaining outer RIGHT/BOTTOM edges in floating ── */
-/* remove right edge on the last cell of any header/body row */
+/* remove right edge on the last cell of any header/body row 
 .v-paper > main.is-floating .fc-theme-standard th:last-child,
 .v-paper > main.is-floating .fc-theme-standard td:last-child {
   border-right: 0 !important;
-}
+}*/
 
 /* remove bottom edge on the last row of any table */
 .v-paper > main.is-floating .fc-theme-standard tbody > tr:last-child > td {
@@ -310,6 +310,6 @@ html, body {
 /* some FC wrappers render borders on their container TDs — strip them too */
 .v-paper > main.is-floating .fc .fc-scrollgrid-section > td,
 .v-paper > main.is-floating .fc .fc-timegrid .fc-scrollgrid-section-body > td {
-  border-right: 0 !important;
+  /*border-right: 0 !important;*/
   border-bottom: 0 !important;
 }
