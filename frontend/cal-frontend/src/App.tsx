@@ -322,10 +322,13 @@ export default function App() {
         </div>
 
         {/* Plaque with “Cal” */}
+        {/* Plaque with “Cal” + side garlands */}
         <div className="v-plaque">
+          <img aria-hidden src="/roses-divider.png" className="v-rose v-rose-left" />
           <div className="v-cal-logo">Cal</div>
+          <img aria-hidden src="/roses-divider.png" className="v-rose v-rose-right" />
         </div>
-
+          
         {/* Month title row */}
         <div className="v-monthbar">
           <div className="v-year">{year}</div>
