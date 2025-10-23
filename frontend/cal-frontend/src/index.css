@@ -14,7 +14,7 @@ html, body, #root { min-height: 100%; }
 :root{
   --paper: #bda982;   /* tan */
   --ink:   #000000;   /* black */
-  --rail:  #2f2b24;   /* dark rails */
+  --rail:  #373228;   /* dark rails */
   --accent:#b42818;   /* month red + arrow red (close to mock's ~#B33924) */
   --bevel: #e9dec7;   /* light bevel for nav */
   --navface:#cfb78f;  /* nav face */
@@ -34,7 +34,7 @@ html, body {
 /* Paper container (outer frame) */
 .v-paper {
   /* 👇 wider calendar, closer to arrows */
-  max-width: 1320px;
+  max-width: 1280px;
   margin: 0 auto;
   background: var(--paper);
   border: 6px solid var(--ink);
