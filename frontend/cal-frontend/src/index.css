@@ -115,7 +115,7 @@ html, body {
 
 /* Outside nav arrows — now relative to the paper, hugging the edge */
 .v-nav {
-  position: absolute;
+  position: fixed;
   top: 50%;
   transform: translateY(-50%);
   width: var(--nav-diam);
@@ -131,8 +131,8 @@ html, body {
   z-index: 5;
   user-select: none;
 }
-.v-nav-left  { left: var(--nav-edge-offset); }
-.v-nav-right { right: var(--nav-edge-offset); }
+.v-nav-left  { left: 24px; }
+.v-nav-right { right: 24px; }
 .v-nav:hover { filter: brightness(1.02); }
 
 /* arrow fill */
@@ -144,7 +144,7 @@ html, body {
 /* Heavy borders everywhere (match mock) */
 .fc-theme-standard .fc-scrollgrid { border: 4px solid var(--ink); }
 .fc-theme-standard td,
-.fc-theme-standard th { border: 2px solid var(--ink); }
+.fc-theme-standard th { border: 1px solid var(--ink); }
 
 /* Remove stray bottom margin under grid harness (prevents tan gap) */
 .fc .fc-view-harness { margin-bottom: 0 !important; }
