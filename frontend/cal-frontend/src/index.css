@@ -26,8 +26,8 @@ html, body, #root { min-height: 100%; }
 
 
   /* sizing for the tan paper */
-  --paper-max: 1216px;   /* a little smaller than before */
-  --edge-gap:  120px;    /* keeps the paper away from the arrows at 100% */
+  --paper-max: 1180px;   /* a little smaller than before */
+  --edge-gap:  140px;    /* keeps the paper away from the arrows at 100% */
 
 }
 
