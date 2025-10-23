@@ -235,8 +235,12 @@ html, body {
 
 /* Floating: shrink the inner calendar with clear margin on L / R / bottom.
    Small top margin keeps it tucked under the month row */
+/* Floating: use padding on the container so the calendar stays inside the paper height */
+.v-paper > main.is-floating {
+  padding: 8px 24px 24px 24px; /* top, right, bottom, left */
+}
 .v-paper > main.is-floating .fc {
-  margin: 8px 24px 24px 24px;  /* top, right, bottom, left */
+  margin: 0; /* prevent overflow past the paper bottom */
 }
 
 /* Floating + MONTH:
@@ -251,4 +255,42 @@ html, body {
   border-right: 0 !important;
   border-bottom: 0 !important;
   border-top: 4px solid var(--ink) !important;
+}
+/* ───────────────── Floating edge control ───────────────── */
+
+/* Base: ensure the scrollgrid itself has no bottom/right borders in floating */
+.v-paper > main.is-floating .fc-theme-standard .fc-scrollgrid {
+  border-right: 0 !important;
+  border-bottom: 0 !important;
+}
+
+/* MONTH (dayGrid) — remove outer RIGHT & BOTTOM; also remove LEFT (per spec) */
+.v-paper > main.is-floating.view-month .fc .fc-col-header thead tr > th:last-child,
+.v-paper > main.is-floating.view-month .fc .fc-daygrid-body table > tbody > tr > td:last-child {
+  border-right: 0 !important;
+}
+.v-paper > main.is-floating.view-month .fc .fc-daygrid-body table > tbody > tr:last-child > td {
+  border-bottom: 0 !important;
+}
+.v-paper > main.is-floating.view-month .fc .fc-col-header thead tr > th:first-child,
+.v-paper > main.is-floating.view-month .fc .fc-daygrid-body table > tbody > tr > td:first-child {
+  border-left: 0 !important;
+}
+
+/* WEEK/DAY (timeGrid) — keep LEFT; remove RIGHT & BOTTOM only */
+.v-paper > main.is-floating.view-week .fc .fc-col-header thead tr > th:last-child,
+.v-paper > main.is-floating.view-day  .fc .fc-col-header thead tr > th:last-child {
+  border-right: 0 !important;
+}
+
+/* Right outer edge across the time columns */
+.v-paper > main.is-floating.view-week .fc .fc-timegrid-cols table tr > td:last-child,
+.v-paper > main.is-floating.view-day  .fc .fc-timegrid-cols table tr > td:last-child {
+  border-right: 0 !important;
+}
+
+/* Bottom outer edge of the slotted grid */
+.v-paper > main.is-floating.view-week .fc .fc-timegrid-slots table > tbody > tr:last-child > td,
+.v-paper > main.is-floating.view-day  .fc .fc-timegrid-slots table > tbody > tr:last-child > td {
+  border-bottom: 0 !important;
 }
