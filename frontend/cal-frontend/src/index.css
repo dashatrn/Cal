@@ -15,7 +15,7 @@ html, body, #root { min-height: 100%; }
   --paper: #bda982;   /* tan */
   --ink:   #000000;   /* black */
   --rail:  #373228;   /* dark rails */
-  --accent:#b42818;   /* month red + arrow red (close to mock's ~#B33924) */
+  --accent:#b42b18;   /* month & arrow red — per request */
   --bevel: #e9dec7;   /* light bevel for nav */
   --navface:#cfb78f;  /* nav face */
   --navring:#8c7a59;  /* outer ring */
@@ -24,11 +24,12 @@ html, body, #root { min-height: 100%; }
   --nav-diam: 92px;           /* circle diameter */
   --nav-edge-offset: -102px;  /* how far past the paper edge (negative=outside) */
 
-
   /* sizing for the tan paper */
   --paper-max: 1180px;   /* a little smaller than before */
   --edge-gap:  140px;    /* keeps the paper away from the arrows at 100% */
 
+  /* arrow icon sizing (inside the circle) */
+  --arrow-size: 56px;    /* slightly bigger glyph */
 }
 
 html, body {
@@ -72,7 +73,13 @@ html, body {
   align-items: center;
   padding: 4px 44px 18px;
 }
-.v-year { font-weight: 700; font-size: 44px; text-align: center; }
+.v-year {
+  font-weight: 700;
+  font-size: 44px;
+  text-align: center;
+  /* subtle shadow for the year */
+  text-shadow: 0 2px 2px rgba(0,0,0,.22);
+}
 .v-month {
   font-weight: 800;
   font-size: 64px;
@@ -80,6 +87,8 @@ html, body {
   color: var(--accent);
   text-transform: uppercase;
   text-align: center;
+  /* subtle shadow for the month name */
+  text-shadow: 0 2px 2px rgba(0,0,0,.22);
 }
 
 /* Toolbox button (top-left) */
@@ -119,7 +128,7 @@ html, body {
 }
 .v-menu-item:active { transform: translateY(1px); }
 
-/* Outside nav arrows — keep as-is */
+/* Outside nav arrows */
 .v-nav {
   position: fixed;
   top: 50%;
@@ -127,10 +136,10 @@ html, body {
   width: var(--nav-diam);
   height: var(--nav-diam);
   border-radius: 999px;
-  background: radial-gradient(115% 115% at 30% 25%, var(--bevel) 0%, var(--navface) 55%, #b79f75 100%);
-  box-shadow:
-    0 4px 0 rgba(0,0,0,.35),
-    inset 0 0 0 2px rgba(0,0,0,.12);
+  /* Plain beige circle (no gradient) */
+  background: var(--paper);
+  /* light outer shadow so it reads as a button, but not heavy */
+  box-shadow: 0 2px 0 rgba(0,0,0,.25);
   border: 2px solid var(--navring);
   display: grid; place-content: center;
   cursor: pointer;
@@ -141,8 +150,10 @@ html, body {
 .v-nav-right { right: 24px; }
 .v-nav:hover { filter: brightness(1.02); }
 
-/* arrow fill */
-.v-arrow rect, .v-arrow path { fill: var(--accent); }
+/* Bigger arrow glyph + subtle shadow; keep circle size the same */
+.v-nav .v-arrow { width: var(--arrow-size); height: var(--arrow-size); filter: drop-shadow(0 2px 2px rgba(0,0,0,.25)); }
+/* arrow color (matches October) */
+.v-arrow rect, .v-arrow path { fill: var(--accent) !important; }
 
 /* FullCalendar look */
 .fc { background: var(--paper); }
