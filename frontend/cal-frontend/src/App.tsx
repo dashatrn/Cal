@@ -41,7 +41,7 @@ function headerLabel(date: Date, viewType: string) {
 function ArrowSVG({ dir }: { dir: "left" | "right" }) {
   const transform = dir === "left" ? "scale(-1,1) translate(-56,0)" : undefined;
   return (
-    <svg width="56" height="56" viewBox="0 0 56 56" aria-hidden focusable="false" className="v-arrow">
+    <svg width="44" height="44" viewBox="0 0 56 56" aria-hidden focusable="false" className="v-arrow">
       <g transform={transform}>
         <rect x="10" y="24" width="28" height="8" rx="4" />
         <path d="M36 12 L50 28 L36 44 Z" />
@@ -55,11 +55,6 @@ export default function App() {
   const [modalInit, setModalInit] = useState<ApiEvent | undefined | null>(null);
   const [showNew, setShowNew] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
-  const [layout, setLayout] = useState<'attached'|'floating'>(
-    (localStorage.getItem('cal:layout') as 'attached'|'floating') || 'attached'
-  );
-  const [viewType, setViewType] = useState<string>('timeGridWeek');
-
   const calRef = useRef<FullCalendar | null>(null);
   const toolsRef = useRef<HTMLDivElement | null>(null);
 
@@ -278,30 +273,6 @@ export default function App() {
               >
                 + New
               </button>
-            {/* ---- View attachment mode ---- */}
-              <button
-                className="v-menu-item"
-                onClick={() => {
-                  setLayout('floating');
-                  localStorage.setItem('cal:layout','floating');
-                  setMenuOpen(false);
-                  setTimeout(() => calRef.current?.getApi().updateSize(), 0);
-                }}
-              >
-                Floating
-              </button>
-              <button
-                className="v-menu-item"
-                onClick={() => {
-                  setLayout('attached');
-                  localStorage.setItem('cal:layout','attached');
-                  setMenuOpen(false);
-                  setTimeout(() => calRef.current?.getApi().updateSize(), 0);
-                }}
-              >
-                Attached
-              </button>
-
             </div>
           )}
         </div>
@@ -320,9 +291,7 @@ export default function App() {
 
         {/* Calendar */}
         <main className="relative flex-1 min-h-0 px-0 pb-0">
-          <div className={`v-grid ${layout} ${viewType === 'dayGridMonth' ? 'is-month' : 'is-week'}`}>
-                      <FullCalendar
-
+          <FullCalendar
             ref={calRef}
             plugins={[dayGridPlugin, timeGridPlugin, interactionPlugin]}
             initialView="timeGridWeek"
@@ -363,13 +332,11 @@ export default function App() {
                 localStorage.setItem(LS_DATE, current.toISOString());
                 setAnchor(current); // keep header in sync
               }
-              setViewType(arg.view.type);
               const startStr = arg.startStr;
               const endStr = arg.endStr;
               reload(startStr, endStr);
             }}
           />
-          </div>
         </main>
       </div>
 

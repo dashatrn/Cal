@@ -15,21 +15,20 @@ html, body, #root { min-height: 100%; }
   --paper: #bda982;   /* tan */
   --ink:   #000000;   /* black */
   --rail:  #373228;   /* dark rails */
-  --accent:#b42b18;   /* month red + arrow red (close to mock's ~#B33924) */
+  --accent:#b42818;   /* month red + arrow red (close to mock's ~#B33924) */
   --bevel: #e9dec7;   /* light bevel for nav */
   --navface:#cfb78f;  /* nav face */
   --navring:#8c7a59;  /* outer ring */
 
   /* nav sizing (tuned to mock) */
-  --nav-diam: 108px;           /* circle diameter */
+  --nav-diam: 92px;           /* circle diameter */
   --nav-edge-offset: -102px;  /* how far past the paper edge (negative=outside) */
 
 
   /* sizing for the tan paper */
   --paper-max: 1180px;   /* a little smaller than before */
   --edge-gap:  140px;    /* keeps the paper away from the arrows at 100% */
-  /* inner separation when "floating" */
-  --float-gap: 28px;     /* tiny inset on both sides *
+
 }
 
 html, body {
@@ -128,11 +127,11 @@ html, body {
   width: var(--nav-diam);
   height: var(--nav-diam);
   border-radius: 999px;
-  /* Plain beige disc (no gradient), same as paper */
-  background: var(--paper);
-  border: 2px solid var(--ink);
-  box-shadow: none;
-
+  background: radial-gradient(115% 115% at 30% 25%, var(--bevel) 0%, var(--navface) 55%, #b79f75 100%);
+  box-shadow:
+    0 4px 0 rgba(0,0,0,.35),
+    inset 0 0 0 2px rgba(0,0,0,.12);
+  border: 2px solid var(--navring);
   display: grid; place-content: center;
   cursor: pointer;
   z-index: 5;
@@ -216,28 +215,3 @@ html, body {
 
 /* keep selection/resizer visible on red */
 .fc-event .fc-resizer { background: #000; }
-
-
-/* ───────────────── Attached vs Floating layout ───────────────── */
-.v-grid { height: 100%; }
-.v-grid.attached { width: 100%; height: 100%; }
-.v-grid.floating {
-  height: 100%;
-  width: calc(100% - var(--float-gap) * 2);
-  margin: 0 auto;
-}
-
-/* Month view, floating:
-   - keep our existing TOP border only (already handled by base rule)
-   - just smaller width via .v-grid.floating */
-
-/* Week view, floating:
-   - top + left borders only; no right/bottom
-   - override the base top-only rule */
-.v-grid.floating.is-week .fc-theme-standard .fc-scrollgrid {
-  border-left: 4px solid var(--ink) !important;
-  border-top:  4px solid var(--ink) !important;
-  border-right: 0 !important;
-  border-bottom:0 !important;
-}
-}
