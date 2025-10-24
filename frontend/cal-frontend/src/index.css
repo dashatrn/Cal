@@ -387,3 +387,33 @@ html, body {
   bottom: var(--roses-bottom-gap); top: auto;
   transform: none;
 }
+
+
+/* ───────────────── FINAL EDGE CLAMPS ───────────────── */
+
+/* Clip any anti-aliased leftovers right at the container edge */
+.v-paper > main.is-floating { overflow: hidden; }
+
+/* FLOATING • MONTH — remove ONLY the outer right + bottom edges */
+.v-paper > main.is-floating.view-month .fc .fc-col-header table thead tr > th:last-child,
+.v-paper > main.is-floating.view-month .fc .fc-daygrid-body table tbody tr > td:last-child {
+  border-right: 0 !important;
+}
+.v-paper > main.is-floating.view-month .fc .fc-daygrid-body table tbody tr:last-child > td {
+  border-bottom: 0 !important;
+}
+/* Belt & suspenders in case a theme puts borders on the scrollgrid */
+.v-paper > main.is-floating.view-month .fc-theme-standard .fc-scrollgrid {
+  border-right: 0 !important;
+  border-bottom: 0 !important;
+}
+
+/* FLOATING • WEEK — remove ONLY the outer bottom edge */
+.v-paper > main.is-floating.view-week .fc .fc-timegrid-cols table tbody tr:last-child > td,
+.v-paper > main.is-floating.view-week .fc .fc-timegrid-slots table tbody tr:last-child > td {
+  border-bottom: 0 !important;
+}
+/* Belt & suspenders */
+.v-paper > main.is-floating.view-week .fc-theme-standard .fc-scrollgrid {
+  border-bottom: 0 !important;
+}
