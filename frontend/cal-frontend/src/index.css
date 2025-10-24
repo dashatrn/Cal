@@ -330,3 +330,41 @@ html, body {
 .v-paper > main.is-floating.view-month .fc .fc-daygrid-body tr:last-child td{
   border-bottom: 0 !important;
 }
+
+/* ─────────────────────────────────────────────────────────────────── */
+/* HARD KILL: strays that still create edges in floating mode          */
+/* (Only raises specificity; does not change appearance elsewhere)     */
+/* ─────────────────────────────────────────────────────────────────── */
+
+/* 1) Absolutely no BOTTOM edge anywhere when floating (all views) */
+.v-paper > main.is-floating .fc .fc-scrollgrid,
+.v-paper > main.is-floating .fc .fc-scrollgrid > tbody > tr > * {
+  border-bottom: 0 !important;
+}
+
+/* 2) Absolutely no RIGHT edge in floating MONTH */
+.v-paper > main.is-floating.view-month .fc .fc-scrollgrid,
+.v-paper > main.is-floating.view-month .fc .fc-scrollgrid > tbody > tr > * {
+  border-right: 0 !important;
+}
+
+/* 3) Ensure sync tables (header/body) can’t recreate edges */
+.v-paper > main.is-floating .fc .fc-scrollgrid-sync-table tbody > tr:last-child > td {
+  border-bottom: 0 !important;
+}
+.v-paper > main.is-floating.view-month .fc .fc-scrollgrid-sync-table thead > tr > th:last-child,
+.v-paper > main.is-floating.view-month .fc .fc-scrollgrid-sync-table tbody > tr > td:last-child {
+  border-right: 0 !important;
+}
+
+/* 4) Timegrid-specific divider/footer lines */
+.v-paper > main.is-floating.view-week .fc .fc-timegrid-divider,
+.v-paper > main.is-floating.view-day  .fc .fc-timegrid-divider {
+  border-bottom: 0 !important;
+}
+
+/* 5) Scroller harness wrappers sometimes add their own borders */
+.v-paper > main.is-floating .fc .fc-scroller-harness,
+.v-paper > main.is-floating .fc .fc-scroller {
+  border-bottom: 0 !important;
+}
