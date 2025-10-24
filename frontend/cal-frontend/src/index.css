@@ -91,12 +91,19 @@ html, body {
   text-shadow: 0 2px 2px rgba(0,0,0,.22);
 }
 
-/* Toolbox button (top-left) */
+/* Compact header for Week/Day so the calendar can come up higher */
+.v-monthbar.is-compact {
+  padding: 0 44px 6px;           /* less vertical padding */
+}
+.v-monthbar.is-compact .v-month { font-size: 44px; letter-spacing: .05em; }
+.v-monthbar.is-compact .v-year  { font-size: 28px; }
+
+/* Put toolbox at the top-left of the PAGE (outside the calendar) */
 .v-tools {
-  position: absolute;
-  top: 126px;
-  left: 22px;
-  z-index: 6;
+  position: fixed;
+  top: 18px;
+  left: 24px;
+  z-index: 10;
 }
 .v-toolbtn {
   width: 42px; height: 42px;
@@ -226,6 +233,17 @@ html, body {
 /* keep selection/resizer visible on red */
 .fc-event .fc-resizer { background: #000; }
 
+/* Week view: kill any lingering white borders/outlines around events */
+.v-paper > main.view-week .fc { --fc-event-border-color: transparent; }
+.v-paper > main.view-week .fc-timegrid-event,
+.v-paper > main.view-week .fc-timegrid-event .fc-event-main,
+.v-paper > main.view-week .fc-v-event,
+.v-paper > main.view-week .fc-v-event .fc-event-main {
+  border: 0 !important;
+  box-shadow: none !important;
+  outline: 0 !important;
+}
+
 /* ─────────────────────────────────────────────────────────────────── */
 /*                ATTACHED vs FLOATING (toggle)                        */
 /* ─────────────────────────────────────────────────────────────────── */
@@ -273,6 +291,15 @@ html, body {
   border-bottom: 0 !important;
 }
 
+/* Extra safeguard for week floating: absolutely no bottom line */
+.v-paper > main.is-floating.view-week .fc-theme-standard .fc-scrollgrid {
+  border-bottom: 0 !important;
+}
+.v-paper > main.is-floating.view-week .fc .fc-timegrid-body tr:last-child td,
+.v-paper > main.is-floating.view-week .fc .fc-timegrid-slots tr:last-child td {
+  border-bottom: 0 !important;
+}
+
 /* ── FLOATING + MONTH: NO outer RIGHT border (and no bottom) ──────── */
 /* Keep only the top border from the scrollgrid (and no left/right/bottom). */
 .v-paper > main.is-floating.view-month .fc-theme-standard .fc-scrollgrid {
@@ -294,6 +321,18 @@ html, body {
 .v-paper > main.is-floating.view-month .fc .fc-col-header thead tr > th:first-child,
 .v-paper > main.is-floating.view-month .fc .fc-daygrid-body table > tbody > tr > td:first-child {
   border-left: 0 !important;
+}
+
+/* Stronger specificity to kill any stubborn right/bottom in Month + Floating */
+.v-paper > main.is-floating.view-month .fc .fc-daygrid-body .fc-daygrid-day {
+  border-right-width: 0 !important;
+}
+.v-paper > main.is-floating.view-month .fc .fc-daygrid-body tr td:last-child {
+  border-right: 0 !important;
+}
+.v-paper > main.is-floating.view-month .fc .fc-daygrid-body tr:last-child .fc-daygrid-day,
+.v-paper > main.is-floating.view-month .fc .fc-daygrid-body tr:last-child td {
+  border-bottom: 0 !important;
 }
 
 /* ── Roses beside “Cal” ─────────────────────────────────────────── */
