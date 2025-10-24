@@ -218,8 +218,8 @@ html, body {
 .fc-timegrid-event,
 .fc-event .fc-event-main {
   background: var(--accent) !important; /* fill = dark red */
-  color: var(--accent) !important;               /* readable on red */
-  border: 1px solid #330606 !important;    /* keep the black ledger outline */
+  color: #ecb5b5 !important;               /* readable on red */
+  border: 1px solid #580c0c !important;    /* keep the black ledger outline */
   border-radius: 0 !important;
 }
 
