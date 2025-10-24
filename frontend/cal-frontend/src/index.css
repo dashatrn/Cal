@@ -446,3 +446,56 @@ html, body {
   pointer-events: none;
   z-index: 3;
 }
+
+/* ───────────────── Fixes requested 2025-10-24 ───────────────── */
+
+/* 1) FLOATING • MONTH — nuke any lingering RIGHT/BOTTOM edge */
+.v-paper > main.is-floating.view-month .fc .fc-col-header thead tr > th:last-child,
+.v-paper > main.is-floating.view-month .fc .fc-daygrid-body table > tbody > tr > td:last-child,
+.v-paper > main.is-floating.view-month .fc .fc-daygrid-body table > tbody > tr:last-child > td {
+  border-right: 0 !important;
+  border-bottom: 0 !important;
+}
+/* Belt & suspenders: ensure the outer scrollgrid itself has no right/bottom */
+.v-paper > main.is-floating.view-month .fc-theme-standard .fc-scrollgrid,
+.v-paper > main.is-floating.view-month .fc .fc-scrollgrid {
+  border-right: 0 !important;
+  border-bottom: 0 !important;
+}
+/* Raise the masking strips so they sit above any FC internals */
+.v-paper > main.is-floating.view-month::before,
+.v-paper > main.is-floating.view-month::after {
+  z-index: 10; /* was 3 */
+}
+
+/* 2) FLOATING • WEEK/DAY — remove the BOTTOM line that still shows */
+.v-paper > main.is-floating.view-week .fc .fc-timegrid-body table tr:last-child > td,
+.v-paper > main.is-floating.view-day  .fc .fc-timegrid-body table tr:last-child > td,
+.v-paper > main.is-floating.view-week .fc .fc-timegrid-cols table tr:last-child > td,
+.v-paper > main.is-floating.view-day  .fc .fc-timegrid-cols table tr:last-child > td {
+  border-bottom: 0 !important;
+}
+/* Also make sure the outer frame has no bottom edge */
+.v-paper > main.is-floating.view-week .fc-theme-standard .fc-scrollgrid,
+.v-paper > main.is-floating.view-day  .fc-theme-standard .fc-scrollgrid {
+  border-bottom: 0 !important;
+}
+
+/* 3) FLOATING • WEEK/DAY — fix “extra thick” RIGHT edge by removing
+      any inner last-column right borders so only the outer 3px remains */
+.v-paper > main.is-floating.view-week .fc .fc-col-header th:last-child,
+.v-paper > main.is-floating.view-day  .fc .fc-col-header th:last-child,
+.v-paper > main.is-floating.view-week .fc .fc-timegrid-cols table tr > td:last-child,
+.v-paper > main.is-floating.view-day  .fc .fc-timegrid-cols table tr > td:last-child,
+.v-paper > main.is-floating.view-week .fc .fc-timegrid-body table tr > td:last-child,
+.v-paper > main.is-floating.view-day  .fc .fc-timegrid-body table tr > td:last-child {
+  border-right: 0 !important;
+}
+
+/* Keep the outer left/right thickness the same (3px) in floating week/day */
+.v-paper > main.is-floating.view-week .fc-theme-standard .fc-scrollgrid,
+.v-paper > main.is-floating.view-day  .fc-theme-standard .fc-scrollgrid {
+  border-left: 3px solid var(--ink) !important;
+  border-right: 3px solid var(--ink) !important;
+  border-top: 3px solid var(--ink) !important;
+}
