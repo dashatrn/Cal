@@ -140,7 +140,7 @@ html, body {
   background: var(--paper);
   /* light outer shadow so it reads as a button, but not heavy */
   box-shadow: 0 2px 0 rgba(0,0,0,.25);
-  border: 2px solid var(--navring);
+  border: 3px solid var(--ink);
   display: grid; place-content: center;
   cursor: pointer;
   z-index: 5;
@@ -165,7 +165,7 @@ html, body {
   border-left: 0 !important;
   border-right: 0 !important;
   border-bottom: 0 !important;
-  border-top: 4px solid var(--ink) !important; /* line just under the month row */
+  border-top: 3px solid var(--ink) !important; /* line just under the month row */
 }
 .fc-theme-standard td,
 .fc-theme-standard th { border: 2px solid var(--ink); }
@@ -251,9 +251,9 @@ html, body {
 /* ── FLOATING + WEEK/DAY: show OUTER RIGHT border, keep LEFT too ──── */
 .v-paper > main.is-floating.view-week .fc-theme-standard .fc-scrollgrid,
 .v-paper > main.is-floating.view-day  .fc-theme-standard .fc-scrollgrid {
-  border-left: 4px solid var(--ink) !important;
-  border-right: 4px solid var(--ink) !important;  /* <-- right edge visible */
-  border-top: 4px solid var(--ink) !important;
+  border-left: 3px solid var(--ink) !important;
+  border-right: 3px solid var(--ink) !important;  /* <-- right edge visible */
+  border-top: 3px solid var(--ink) !important;
 }
 
 /* Remove the per-cell right borders to avoid a double line on the outer edge;
