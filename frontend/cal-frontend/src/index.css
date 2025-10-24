@@ -368,3 +368,46 @@ html, body {
 .v-paper > main.is-floating .fc .fc-scroller {
   border-bottom: 0 !important;
 }
+
+
+/* ───────────────────────────────────────────────────────────── */
+/* Floating • MONTH — column alignment & no outer right/bottom   */
+/* ───────────────────────────────────────────────────────────── */
+.v-paper > main.is-floating.view-month .fc-col-header table,
+.v-paper > main.is-floating.view-month .fc-daygrid-body table,
+.v-paper > main.is-floating.view-month .fc-scrollgrid-sync-table {
+  border-collapse: collapse !important;
+  table-layout: fixed !important;
+}
+
+/* Use ONLY left borders for the verticals so header/body align */
+.v-paper > main.is-floating.view-month .fc-col-header th,
+.v-paper > main.is-floating.view-month .fc-daygrid-body td {
+  border-left: var(--ledger-cell) solid var(--ink) !important;
+  border-right: 0 !important;
+}
+
+/* Optional: remove outer left edge as well (keep if you like it) */
+.v-paper > main.is-floating.view-month .fc-col-header th:first-child,
+.v-paper > main.is-floating.view-month .fc-daygrid-body td:first-child {
+  border-left: 0 !important;
+}
+
+/* No outer bottom edge */
+.v-paper > main.is-floating.view-month .fc-daygrid-body tr:last-child td {
+  border-bottom: 0 !important;
+}
+
+/* No outer right edge (covers when last visible column is Friday/Sat) */
+.v-paper > main.is-floating.view-month .fc-col-header th:last-child,
+.v-paper > main.is-floating.view-month .fc-daygrid-body td:last-child {
+  border-right: 0 !important;
+}
+
+/* Keep only the top border on the overall month grid */
+.v-paper > main.is-floating.view-month .fc-theme-standard .fc-scrollgrid {
+  border-top: var(--ledger-top) solid var(--ink) !important;
+  border-left: 0 !important;
+  border-right: 0 !important;
+  border-bottom: 0 !important;
+}
