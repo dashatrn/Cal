@@ -324,7 +324,7 @@ export default function App() {
         {/* Plaque with “Cal” */}
         {/* Plaque with “Cal” + side garlands */}
         <div className="v-plaque">
-          <img aria-hidden src="/roses-divider2.jpeg" className="v-rose v-rose-left" />
+          <img aria-hidden src="/roses-divider2.png" className="v-rose v-rose-left" />
           <div className="v-cal-logo">Cal</div>
           <img aria-hidden src="/roses-divider.png" className="v-rose v-rose-right" />
         </div>
