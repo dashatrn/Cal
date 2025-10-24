@@ -417,3 +417,32 @@ html, body {
 .v-paper > main.is-floating.view-week .fc-theme-standard .fc-scrollgrid {
   border-bottom: 0 !important;
 }
+/* --- Hard masks for any leftover outer edges (floating only) --- */
+.v-paper > main { position: relative; } /* ensure a positioning context */
+
+/* Floating • Month: hide RIGHT edge */
+.v-paper > main.is-floating.view-month::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 6px;                 /* >= border thickness */
+  background: var(--paper);   /* same as paper color */
+  pointer-events: none;
+  z-index: 3;                 /* above the calendar */
+}
+
+/* Floating • Month + Week: hide BOTTOM edge */
+.v-paper > main.is-floating.view-month::after,
+.v-paper > main.is-floating.view-week::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 6px;                /* >= border thickness */
+  background: var(--paper);
+  pointer-events: none;
+  z-index: 3;
+}
