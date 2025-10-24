@@ -247,255 +247,63 @@ html, body {
 /* ─────────────────────────────────────────────────────────────────── */
 /*                ATTACHED vs FLOATING (toggle)                        */
 /* ─────────────────────────────────────────────────────────────────── */
-
-/* Attached: same as current (no extra margins) */
+/* === Floating container basics === */
 .v-paper > main.is-attached .fc { margin: 0; }
+.v-paper > main.is-floating { padding: 8px 24px 24px 24px; overflow: hidden; }
 
-/* Floating: use padding on the container so the calendar stays inside the paper height */
-.v-paper > main.is-floating {
-  padding: 8px 24px 24px 24px; /* top, right, bottom, left */
-}
-.v-paper > main.is-floating .fc {
-  margin: 0; /* prevent overflow past the paper bottom */
-}
+:root { --frame: 3px; } /* outer frame thickness */
 
-/* ── FLOATING: Base scrollgrid suppression ─────────────────────────── */
-/* In floating mode, never draw the bottom outer border from the scrollgrid */
+/* Never draw a bottom frame when floating (all views) */
 .v-paper > main.is-floating .fc-theme-standard .fc-scrollgrid {
   border-bottom: 0 !important;
-  /* note: do NOT touch border-right here; views control it below */
 }
 
-/* ── FLOATING + WEEK/DAY: show OUTER RIGHT border, keep LEFT too ──── */
-.v-paper > main.is-floating.view-week .fc-theme-standard .fc-scrollgrid,
-.v-paper > main.is-floating.view-day  .fc-theme-standard .fc-scrollgrid {
-  border-left: 3px solid var(--ink) !important;
-  border-right: 3px solid var(--ink) !important;  /* <-- right edge visible */
-  border-top: 3px solid var(--ink) !important;
-}
-
-/* Remove the per-cell right borders to avoid a double line on the outer edge;
-   the outer RIGHT edge now comes from the scrollgrid itself. */
-.v-paper > main.is-floating.view-week .fc .fc-col-header thead tr > th:last-child,
-.v-paper > main.is-floating.view-day  .fc .fc-col-header thead tr > th:last-child {
-  border-right: 0 !important;
-}
-.v-paper > main.is-floating.view-week .fc .fc-timegrid-cols table tr > td:last-child,
-.v-paper > main.is-floating.view-day  .fc .fc-timegrid-cols table tr > td:last-child {
-  border-right: 0 !important;
-}
-
-/* Also remove the bottom borders of the last visible time slots row */
-.v-paper > main.is-floating.view-week .fc .fc-timegrid-slots table > tbody > tr:last-child > td,
-.v-paper > main.is-floating.view-day  .fc .fc-timegrid-slots table > tbody > tr:last-child > td {
-  border-bottom: 0 !important;
-}
-
-/* Extra safeguard for week floating: absolutely no bottom line */
-.v-paper > main.is-floating.view-week .fc-theme-standard .fc-scrollgrid {
-  border-bottom: 0 !important;
-}
-.v-paper > main.is-floating.view-week .fc .fc-timegrid-body tr:last-child td,
-.v-paper > main.is-floating.view-week .fc .fc-timegrid-slots tr:last-child td {
-  border-bottom: 0 !important;
-}
-
-/* ── FLOATING + MONTH: NO outer RIGHT border (and no bottom) ──────── */
-/* Keep only the top border from the scrollgrid (and no left/right/bottom). */
+/* ===== Floating • MONTH =====
+   - Keep top + left frame
+   - Remove right + bottom frame
+   - Kill last-row and last-column cell borders so nothing “reappears”
+*/
 .v-paper > main.is-floating.view-month .fc-theme-standard .fc-scrollgrid {
-  border-top: 4px solid var(--ink) !important;
-  border-left: 0 !important;
-  border-right: 0 !important;  /* <-- no right edge in month */
+  border-top:  var(--frame) solid var(--ink) !important;
+  border-left: var(--frame) solid var(--ink) !important;
+  border-right: 0 !important;
   border-bottom: 0 !important;
 }
-
-/* Remove outer cell borders so the month grid doesn’t redraw the right/bottom edges */
-.v-paper > main.is-floating.view-month .fc .fc-col-header thead tr > th:last-child,
-.v-paper > main.is-floating.view-month .fc .fc-daygrid-body table > tbody > tr > td:last-child {
+.v-paper > main.is-floating.view-month .fc .fc-col-header th:last-child,
+.v-paper > main.is-floating.view-month .fc .fc-daygrid-body td:last-child {
   border-right: 0 !important;
 }
-.v-paper > main.is-floating.view-month .fc .fc-daygrid-body table > tbody > tr:last-child > td {
-  border-bottom: 0 !important;
-}
-/* (Optional) also remove the left-most cell border if you want a clean tuck under the header */
-.v-paper > main.is-floating.view-month .fc .fc-col-header thead tr > th:first-child,
-.v-paper > main.is-floating.view-month .fc .fc-daygrid-body table > tbody > tr > td:first-child {
-  border-left: 0 !important;
-}
-
-/* Stronger specificity to kill any stubborn right/bottom in Month + Floating */
-.v-paper > main.is-floating.view-month .fc .fc-daygrid-body .fc-daygrid-day {
-  border-right-width: 0 !important;
-}
-.v-paper > main.is-floating.view-month .fc .fc-daygrid-body tr td:last-child {
-  border-right: 0 !important;
-}
-.v-paper > main.is-floating.view-month .fc .fc-daygrid-body tr:last-child .fc-daygrid-day,
 .v-paper > main.is-floating.view-month .fc .fc-daygrid-body tr:last-child td {
   border-bottom: 0 !important;
 }
 
-/* ── Roses beside “Cal” ─────────────────────────────────────────── */
-/* Quick-adjust knobs */
-:root{
-  --roses-w:        220px;  /* width of each image */
-  --roses-inset:     10px;  /* distance from the plaque's inner edge */
-  --roses-dy:         0px;  /* + moves down / - moves up when centered */
-  --roses-top-gap:    6px;  /* gap from top when using .roses-top */
-  --roses-bottom-gap: 6px;  /* gap from bottom when using .roses-bottom */
-}
-
-/* make sure absolute children position relative to the plaque */
-.v-plaque { position: relative; }
-
-/* base image look */
-.v-rose{
-  position: absolute;
-  width: var(--roses-w);
-  max-width: 40%;        /* keeps them from crowding the word on small screens */
-  pointer-events: none;  /* purely decorative */
-  user-select: none;
-}
-
-/* Default: vertically centered; left is rotated 180° as requested */
-.v-rose-left{
-  left: var(--roses-inset);
-  top: calc(50% + var(--roses-dy));
-  transform: translateY(-50%);
-}
-.v-rose-right{
-  right: var(--roses-inset);
-  top: calc(50% + var(--roses-dy));
-  transform: translateY(-50%);
-}
-
-/* Optional anchors: add .roses-top or .roses-bottom on .v-plaque
-   if you want the garlands pinned to an edge instead of centered. */
-.v-plaque.roses-top .v-rose-left{
-  top: var(--roses-top-gap);
-  transform: rotate(180deg);
-}
-.v-plaque.roses-top .v-rose-right{
-  top: var(--roses-top-gap);
-  transform: none;
-}
-.v-plaque.roses-bottom .v-rose-left{
-  bottom: var(--roses-bottom-gap); top: auto;
-  transform: rotate(180deg);
-}
-.v-plaque.roses-bottom .v-rose-right{
-  bottom: var(--roses-bottom-gap); top: auto;
-  transform: none;
-}
-
-
-/* ───────────────── FINAL EDGE CLAMPS ───────────────── */
-
-/* Clip any anti-aliased leftovers right at the container edge */
-.v-paper > main.is-floating { overflow: hidden; }
-
-/* FLOATING • MONTH — remove ONLY the outer right + bottom edges */
-.v-paper > main.is-floating.view-month .fc .fc-col-header table thead tr > th:last-child,
-.v-paper > main.is-floating.view-month .fc .fc-daygrid-body table tbody tr > td:last-child {
-  border-right: 0 !important;
-}
-.v-paper > main.is-floating.view-month .fc .fc-daygrid-body table tbody tr:last-child > td {
-  border-bottom: 0 !important;
-}
-/* Belt & suspenders in case a theme puts borders on the scrollgrid */
-.v-paper > main.is-floating.view-month .fc-theme-standard .fc-scrollgrid {
-  border-right: 0 !important;
-  border-bottom: 0 !important;
-}
-
-/* FLOATING • WEEK — remove ONLY the outer bottom edge */
-.v-paper > main.is-floating.view-week .fc .fc-timegrid-cols table tbody tr:last-child > td,
-.v-paper > main.is-floating.view-week .fc .fc-timegrid-slots table tbody tr:last-child > td {
-  border-bottom: 0 !important;
-}
-/* Belt & suspenders */
-.v-paper > main.is-floating.view-week .fc-theme-standard .fc-scrollgrid {
-  border-bottom: 0 !important;
-}
-/* --- Hard masks for any leftover outer edges (floating only) --- */
-.v-paper > main { position: relative; } /* ensure a positioning context */
-
-/* Floating • Month: hide RIGHT edge */
-.v-paper > main.is-floating.view-month::before {
-  content: "";
-  position: absolute;
-  top: 0;
-  right: 0;
-  bottom: 0;
-  width: 6px;                 /* >= border thickness */
-  background: var(--paper);   /* same as paper color */
-  pointer-events: none;
-  z-index: 3;                 /* above the calendar */
-}
-
-/* Floating • Month + Week: hide BOTTOM edge */
-.v-paper > main.is-floating.view-month::after,
-.v-paper > main.is-floating.view-week::after {
-  content: "";
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  height: 6px;                /* >= border thickness */
-  background: var(--paper);
-  pointer-events: none;
-  z-index: 3;
-}
-
-/* ───────────────── Fixes requested 2025-10-24 ───────────────── */
-
-/* 1) FLOATING • MONTH — nuke any lingering RIGHT/BOTTOM edge */
-.v-paper > main.is-floating.view-month .fc .fc-col-header thead tr > th:last-child,
-.v-paper > main.is-floating.view-month .fc .fc-daygrid-body table > tbody > tr > td:last-child,
-.v-paper > main.is-floating.view-month .fc .fc-daygrid-body table > tbody > tr:last-child > td {
-  border-right: 0 !important;
-  border-bottom: 0 !important;
-}
-/* Belt & suspenders: ensure the outer scrollgrid itself has no right/bottom */
-.v-paper > main.is-floating.view-month .fc-theme-standard .fc-scrollgrid,
-.v-paper > main.is-floating.view-month .fc .fc-scrollgrid {
-  border-right: 0 !important;
-  border-bottom: 0 !important;
-}
-/* Raise the masking strips so they sit above any FC internals */
-.v-paper > main.is-floating.view-month::before,
-.v-paper > main.is-floating.view-month::after {
-  z-index: 10; /* was 3 */
-}
-
-/* 2) FLOATING • WEEK/DAY — remove the BOTTOM line that still shows */
-.v-paper > main.is-floating.view-week .fc .fc-timegrid-body table tr:last-child > td,
-.v-paper > main.is-floating.view-day  .fc .fc-timegrid-body table tr:last-child > td,
-.v-paper > main.is-floating.view-week .fc .fc-timegrid-cols table tr:last-child > td,
-.v-paper > main.is-floating.view-day  .fc .fc-timegrid-cols table tr:last-child > td {
-  border-bottom: 0 !important;
-}
-/* Also make sure the outer frame has no bottom edge */
+/* ===== Floating • WEEK & DAY =====
+   - No bottom frame
+   - Left & right frames equal thickness (not “extra thick”)
+   - Remove inner last-column borders to avoid double thickness
+*/
 .v-paper > main.is-floating.view-week .fc-theme-standard .fc-scrollgrid,
 .v-paper > main.is-floating.view-day  .fc-theme-standard .fc-scrollgrid {
+  border-top:  var(--frame) solid var(--ink) !important;
+  border-left: var(--frame) solid var(--ink) !important;
+  border-right: var(--frame) solid var(--ink) !important;  /* same as left */
   border-bottom: 0 !important;
 }
 
-/* 3) FLOATING • WEEK/DAY — fix “extra thick” RIGHT edge by removing
-      any inner last-column right borders so only the outer 3px remains */
+/* Strip inner last-column borders (prevents double-thick right edge) */
 .v-paper > main.is-floating.view-week .fc .fc-col-header th:last-child,
 .v-paper > main.is-floating.view-day  .fc .fc-col-header th:last-child,
-.v-paper > main.is-floating.view-week .fc .fc-timegrid-cols table tr > td:last-child,
-.v-paper > main.is-floating.view-day  .fc .fc-timegrid-cols table tr > td:last-child,
-.v-paper > main.is-floating.view-week .fc .fc-timegrid-body table tr > td:last-child,
-.v-paper > main.is-floating.view-day  .fc .fc-timegrid-body table tr > td:last-child {
+.v-paper > main.is-floating.view-week .fc .fc-timegrid-cols td:last-child,
+.v-paper > main.is-floating.view-day  .fc .fc-timegrid-cols td:last-child,
+.v-paper > main.is-floating.view-week .fc .fc-timegrid-body td:last-child,
+.v-paper > main.is-floating.view-day  .fc .fc-timegrid-body td:last-child {
   border-right: 0 !important;
 }
 
-/* Keep the outer left/right thickness the same (3px) in floating week/day */
-.v-paper > main.is-floating.view-week .fc-theme-standard .fc-scrollgrid,
-.v-paper > main.is-floating.view-day  .fc-theme-standard .fc-scrollgrid {
-  border-left: 3px solid var(--ink) !important;
-  border-right: 3px solid var(--ink) !important;
-  border-top: 3px solid var(--ink) !important;
+/* Remove the last row’s inner borders so no bottom line sneaks back in */
+.v-paper > main.is-floating.view-week .fc .fc-timegrid-body tr:last-child td,
+.v-paper > main.is-floating.view-day  .fc .fc-timegrid-body tr:last-child td,
+.v-paper > main.is-floating.view-week .fc .fc-timegrid-slots tr:last-child td,
+.v-paper > main.is-floating.view-day  .fc .fc-timegrid-slots tr:last-child td {
+  border-bottom: 0 !important;
 }
