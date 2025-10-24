@@ -91,7 +91,7 @@ html, body {
 .v-rose-left{
   left: var(--roses-inset);
   top: calc(50% + var(--roses-dy));
-  transform: translateY(-50%) rotate(180deg);
+  transform: translateY(-50%);
 }
 .v-rose-right{
   right: var(--roses-inset);
