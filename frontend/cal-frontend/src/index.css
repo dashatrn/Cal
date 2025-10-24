@@ -15,7 +15,7 @@ html, body, #root { min-height: 100%; }
   --paper: #bda982;   /* tan */
   --ink:   #000000;   /* black */
   --rail:  #373228;   /* dark rails */
-  --accent:#b42b18;   /* month & arrow red — per request */
+  --accent:#9e2a1b;   /* month & arrow red — per request */
   --bevel: #e9dec7;   /* light bevel for nav */
   --navface:#cfb78f;  /* nav face */
   --navring:#8c7a59;  /* outer ring */
@@ -218,8 +218,8 @@ html, body {
 .fc-timegrid-event,
 .fc-event .fc-event-main {
   background: var(--accent) !important; /* fill = dark red */
-  color: #fff !important;               /* readable on red */
-  border: 2px solid #000 !important;    /* keep the black ledger outline */
+  color: var(--accent) !important;               /* readable on red */
+  border: 1px solid #330606 !important;    /* keep the black ledger outline */
   border-radius: 0 !important;
 }
 
