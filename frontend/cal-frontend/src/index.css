@@ -14,7 +14,7 @@ html, body, #root { min-height: 100%; }
   --paper:   #bda982;  /* tan */
   --ink:     #000000;  /* black */
   --rail:    #373228;  /* page background */
-  --accent:  #b42b18;  /* arrows + OCTOBER red (per request) */
+  --accent:  #85291d;  /* arrows + OCTOBER red (per request) */
   --bevel:   #e9dec7;  /* light bevel */
   --navface: #cfb78f;
   --navring: #8c7a59;
@@ -410,4 +410,47 @@ html, body {
   border-left: 0 !important;
   border-right: 0 !important;
   border-bottom: 0 !important;
+}
+
+
+
+/* ────────────────────────────────────────────────────────────────
+   FIX: Floating + Month
+   - remove any outer RIGHT edge (last column)
+   - draw verticals using LEFT borders only so header/body align
+   - keep no BOTTOM edge
+   ──────────────────────────────────────────────────────────────── */
+
+/* Use only LEFT borders for vertical lines (same on header & body) */
+.v-paper > main.is-floating.view-month .fc .fc-col-header th,
+.v-paper > main.is-floating.view-month .fc .fc-daygrid-body td {
+  border-left: var(--ledger-cell) solid var(--ink) !important;
+  border-right: 0 !important;
+  box-sizing: border-box;
+}
+
+/* No outer left edge (Saturday in your layout) */
+.v-paper > main.is-floating.view-month .fc .fc-col-header th:first-child,
+.v-paper > main.is-floating.view-month .fc .fc-daygrid-body td:first-child {
+  border-left: 0 !important;
+}
+
+/* Absolutely no RIGHT edge on the last column (FRI in your layout) */
+.v-paper > main.is-floating.view-month .fc .fc-col-header thead tr > th:last-child,
+.v-paper > main.is-floating.view-month .fc .fc-scrollgrid-sync-table thead tr > th:last-child,
+.v-paper > main.is-floating.view-month .fc .fc-daygrid-body table > tbody > tr > td:last-child {
+  border-right: 0 !important;
+}
+
+/* No outer bottom edge */
+.v-paper > main.is-floating.view-month .fc .fc-daygrid-body table > tbody > tr:last-child > td {
+  border-bottom: 0 !important;
+}
+
+/* Ensure header/body tables compute identical column widths */
+.v-paper > main.is-floating.view-month .fc-col-header table,
+.v-paper > main.is-floating.view-month .fc-daygrid-body table,
+.v-paper > main.is-floating.view-month .fc-scrollgrid-sync-table {
+  border-collapse: collapse !important;
+  table-layout: fixed !important;
 }
