@@ -43,7 +43,7 @@ html, body {
   /* 👇 wider calendar, closer to arrows */
   width: min(var(--paper-max), calc(100vw - var(--edge-gap) * 2));  margin: 0 auto;
   background: var(--paper);
-  border: 6px solid var(--ink);
+  border: 3px solid var(--ink);
   box-sizing: border-box;
   min-height: 100vh;
   display: grid;
@@ -54,7 +54,7 @@ html, body {
 /* Plaque with “Cal” */
 .v-plaque {
   margin: 22px 56px 10px;
-  border: 5px solid var(--ink);
+  border: 3px solid var(--ink);
   border-radius: 28px;
   height: 86px;
   display: grid;
