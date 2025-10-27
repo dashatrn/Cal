@@ -21,26 +21,25 @@ import "./App.css";
 
 type CalEvent = Omit<ApiEvent, "id"> & { id: string };
 
-const LS_VIEW = "cal:view";
-const LS_DATE = "cal:date";
+const LS_VIEW  = "cal:view";
+const LS_DATE  = "cal:date";
 const LS_FRAME = "cal:frame-mode";
+const LS_YEAR  = "cal:year-mode"; // "1" when Year stub is active
 
 type FrameMode = "attached" | "floating";
 
-// Custom DOW labels to match your artwork (TUES., THUR., etc.)
+// Custom DOW labels to match artwork (TUES., THUR., etc.)
 const DOW_FMT = ["SUN.", "MON.", "TUES.", "WED.", "THUR.", "FRI.", "SAT."] as const;
 
 function headerLabel(date: Date, viewType: string) {
   const dow = DOW_FMT[date.getDay()];
-  if (viewType === "dayGridMonth") {
-    return dow; // e.g., SUN.
-  }
+  if (viewType === "dayGridMonth") return dow;
   const mm = String(date.getMonth() + 1).padStart(2, "0");
   const dd = String(date.getDate()).padStart(2, "0");
-  return `${dow} ${mm}/${dd}`; // e.g., WED. 02/26
+  return `${dow} ${mm}/${dd}`;
 }
 
-// SVG arrow — slightly larger glyph to match mock
+// SVG arrow
 function ArrowSVG({ dir }: { dir: "left" | "right" }) {
   const transform = dir === "left" ? "scale(-1,1) translate(-56,0)" : undefined;
   return (
@@ -53,23 +52,64 @@ function ArrowSVG({ dir }: { dir: "left" | "right" }) {
   );
 }
 
+// Placeholder mini calendar icon
+function MiniCalIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden>
+      <rect x="3" y="5" width="18" height="14" rx="2" fill="currentColor" opacity="0.12" />
+      <rect x="3" y="7" width="18" height="12" rx="2" stroke="currentColor" strokeWidth="2" fill="none" />
+      <rect x="6" y="3" width="3" height="4" rx="1" fill="currentColor" />
+      <rect x="15" y="3" width="3" height="4" rx="1" fill="currentColor" />
+      {/* grid */}
+      <path d="M6 11H18M6 14H18M6 17H18M9 9V19M12 9V19M15 9V19" stroke="currentColor" strokeWidth="1" />
+    </svg>
+  );
+}
+
+// Toolbox/briefcase icon
+function ToolboxIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden>
+      <rect x="3" y="8" width="18" height="10" rx="2" />
+      <path
+        d="M8 8V6a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+      />
+      <rect x="7" y="11" width="10" height="3" rx="1" fill="currentColor" />
+    </svg>
+  );
+}
+
 export default function App() {
   const [events, setEvents] = useState<CalEvent[]>([]);
   const [modalInit, setModalInit] = useState<ApiEvent | undefined | null>(null);
   const [showNew, setShowNew] = useState(false);
-  const [menuOpen, setMenuOpen] = useState(false);
+
+  // Two separate menus (calendar vs toolbox)
+  const [menuCalOpen, setMenuCalOpen] = useState(false);
+  const [menuToolsOpen, setMenuToolsOpen] = useState(false);
+
   const calRef = useRef<FullCalendar | null>(null);
   const toolsRef = useRef<HTMLDivElement | null>(null);
 
-  // anchor date for large header (Month + Year)
+  // anchor date for big header
   const [anchor, setAnchor] = useState<Date>(new Date());
   const monthName = anchor.toLocaleString("en-US", { month: "long" }).toUpperCase();
   const year = anchor.getFullYear();
 
-  // track current FC view type to drive floating borders (month vs week/day)
+  // current FC view type for styling
   const [viewType, setViewType] = useState<string>("timeGridWeek");
 
-  // frame mode (attached vs floating) — persisted
+  // pseudo Year mode flag (renders Month grid but treats UX as "Year")
+  const [yearMode, setYearMode] = useState<boolean>(() => {
+    return typeof window !== "undefined" && localStorage.getItem(LS_YEAR) === "1";
+  });
+  const yearModeRef = useRef<boolean>(yearMode);
+  useEffect(() => { yearModeRef.current = yearMode; }, [yearMode]);
+
+  // frame mode (attached vs floating)
   const [frameMode, setFrameMode] = useState<FrameMode>(() => {
     const saved = (typeof window !== "undefined" && localStorage.getItem(LS_FRAME)) as FrameMode | null;
     return saved === "floating" ? "floating" : "attached";
@@ -79,7 +119,7 @@ export default function App() {
   const gotoPrev = () => calRef.current?.getApi().prev();
   const gotoNext = () => calRef.current?.getApi().next();
 
-  // range-aware reload
+  // reload events for a range
   const reload = (start?: string, end?: string) =>
     listEvents(start, end)
       .then((api) => {
@@ -92,7 +132,7 @@ export default function App() {
         return [];
       });
 
-  // initial load + restore view/date
+  // initial load + restore view/date/year mode
   useEffect(() => {
     reload().then((loaded) => {
       const api = calRef.current?.getApi();
@@ -102,7 +142,14 @@ export default function App() {
         if (savedView) api.changeView(savedView);
         if (savedDate) api.gotoDate(savedDate);
         else if (loaded.length) api.gotoDate(loaded[loaded.length - 1]!.start);
-        setViewType(api?.view?.type || "timeGridWeek");
+
+        // If year mode was on last time, reflect that (keeps month grid)
+        if (localStorage.getItem(LS_YEAR) === "1") {
+          setYearMode(true);
+          setViewType("year"); // treat as year for styling/logic
+        } else {
+          setViewType(api?.view?.type || "timeGridWeek");
+        }
       }
       const current = api?.getDate();
       if (current) setAnchor(current);
@@ -110,7 +157,7 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // ask FullCalendar to recompute sizes on window resize
+  // recompute sizes on resize
   useEffect(() => {
     const onResize = () => calRef.current?.getApi().updateSize();
     setTimeout(onResize, 0);
@@ -118,10 +165,13 @@ export default function App() {
     return () => window.removeEventListener("resize", onResize);
   }, []);
 
-  // close dropdown when clicking outside
+  // close both menus when clicking outside
   useEffect(() => {
     const onDoc = (e: MouseEvent) => {
-      if (!toolsRef.current?.contains(e.target as Node)) setMenuOpen(false);
+      if (!toolsRef.current?.contains(e.target as Node)) {
+        setMenuCalOpen(false);
+        setMenuToolsOpen(false);
+      }
     };
     document.addEventListener("mousedown", onDoc);
     return () => document.removeEventListener("mousedown", onDoc);
@@ -142,7 +192,7 @@ export default function App() {
     setModalInit(null);
   };
 
-  // ---------- ICS export for visible range (kept for future use) ----------
+  // Export ICS for visible range (kept for future use)
   const exportICS = () => {
     const api = calRef.current?.getApi();
     if (!api) return;
@@ -152,7 +202,7 @@ export default function App() {
     window.open(url, "_blank");
   };
 
-  // ---------- Drag/drop + resize handlers ----------
+  // drag/drop + resize handlers
   const buildPayloadFromEvent = (fc: any): EventIn => {
     const ext = fc.extendedProps || {};
     const startIso = fc.start ? fc.start.toISOString() : new Date().toISOString();
@@ -173,9 +223,9 @@ export default function App() {
 
     try {
       await updateEvent(id, payload);
-      reload(); // reflect changes
+      reload();
     } catch (_err: any) {
-      revert(); // on conflict just revert — advanced "suggest next" lives in modal flow
+      revert();
     }
   }
 
@@ -187,7 +237,7 @@ export default function App() {
     await applyUpdateOrSuggest(arg.event, arg.revert);
   };
 
-  // Nice compact event rendering: title + (location)
+  // compact event renderer
   const renderEvent = (arg: EventContentArg) => {
     const loc = arg.event.extendedProps?.location as string | undefined;
     const root = document.createElement("div");
@@ -210,17 +260,51 @@ export default function App() {
   // classes to control floating/attached and view-specific borders
   const frameClass = frameMode === "floating" ? "is-floating" : "is-attached";
   const viewClass =
-    viewType === "dayGridMonth"
-      ? "view-month"
-      : viewType === "timeGridDay"
-      ? "view-day"
-      : "view-week";
+    yearMode
+      ? "view-year"
+      : (viewType === "dayGridMonth"
+          ? "view-month"
+          : viewType === "timeGridDay"
+            ? "view-day"
+            : "view-week");
+
+  // -------- Mini calendar actions --------
+  const goToday = () => {
+    // Always go to "today" within current mode (week/month/year)
+    calRef.current?.getApi().today();
+    setMenuCalOpen(false);
+  };
+
+  const setWeek = () => {
+    calRef.current?.getApi().changeView("timeGridWeek");
+    setYearMode(false);
+    localStorage.setItem(LS_YEAR, "0");
+    setViewType("timeGridWeek");
+    setMenuCalOpen(false);
+  };
+
+  const setMonth = () => {
+    calRef.current?.getApi().changeView("dayGridMonth");
+    setYearMode(false);
+    localStorage.setItem(LS_YEAR, "0");
+    setViewType("dayGridMonth");
+    setMenuCalOpen(false);
+  };
+
+  const setYear = () => {
+    // Stub "Year mode": keep Month grid but tag UI/logic as "year"
+    calRef.current?.getApi().changeView("dayGridMonth");
+    setYearMode(true);
+    localStorage.setItem(LS_YEAR, "1");
+    setViewType("year");
+    setMenuCalOpen(false);
+  };
 
   return (
     <>
       {/* OUTER PAPER */}
       <div className="v-paper">
-        {/* Left/Right arrows — unchanged */}
+        {/* Left/Right arrows */}
         <button className="v-nav v-nav-left" onClick={gotoPrev} aria-label="Previous period">
           <ArrowSVG dir="left" />
         </button>
@@ -228,108 +312,87 @@ export default function App() {
           <ArrowSVG dir="right" />
         </button>
 
-        {/* Top-left toolbox button */}
+        {/* Tools cluster (top-left): Mini calendar + Toolbox (stacked) */}
         <div ref={toolsRef} className="v-tools">
-          <button
-            type="button"
-            className="v-toolbtn"
-            aria-label="Calendar tools"
-            onClick={() => setMenuOpen((v) => !v)}
-          >
-            {/* toolbox icon */}
-            <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden>
-              <rect x="3" y="8" width="18" height="10" rx="2" />
-              <path
-                d="M8 8V6a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-              />
-              <rect x="7" y="11" width="10" height="3" rx="1" fill="currentColor" />
-            </svg>
-          </button>
-          {menuOpen && (
-            <div className="v-menu">
-              <button
-                className="v-menu-item"
-                onClick={() => {
-                  calRef.current?.getApi().today();
-                  setMenuOpen(false);
-                }}
-              >
-                Today
-              </button>
-              <button
-                className="v-menu-item"
-                onClick={() => {
-                  calRef.current?.getApi().changeView("timeGridDay");
-                  setMenuOpen(false);
-                }}
-              >
-                Day
-              </button>
-              <button
-                className="v-menu-item"
-                onClick={() => {
-                  calRef.current?.getApi().changeView("timeGridWeek");
-                  setMenuOpen(false);
-                }}
-              >
-                Week
-              </button>
-              <button
-                className="v-menu-item"
-                onClick={() => {
-                  calRef.current?.getApi().changeView("dayGridMonth");
-                  setMenuOpen(false);
-                }}
-              >
-                Month
-              </button>
-              <button
-                className="v-menu-item"
-                onClick={() => {
-                  setMenuOpen(false);
-                  setShowNew(true);
-                }}
-              >
-                + New
-              </button>
+          <div className="v-toolwrap">
+            <button
+              type="button"
+              className="v-toolbtn"
+              aria-label="Calendar"
+              onClick={() => {
+                setMenuCalOpen((v) => !v);
+                setMenuToolsOpen(false);
+              }}
+            >
+              <MiniCalIcon />
+            </button>
+            {menuCalOpen && (
+              <div className="v-menu v-menu-cal">
+                <button className="v-menu-item" onClick={goToday}>Today</button>
+                <button className="v-menu-item" onClick={setWeek}>Week</button>
+                <button className="v-menu-item" onClick={setMonth}>Month</button>
+                <button className="v-menu-item" onClick={setYear}>Year</button>
+              </div>
+            )}
+          </div>
 
-              {/* NEW: frame mode */}
-              <button
-                className="v-menu-item"
-                onClick={() => {
-                  setFrameMode("attached");
-                  localStorage.setItem(LS_FRAME, "attached");
-                  setMenuOpen(false);
-                }}
-              >
-                Attached
-              </button>
-              <button
-                className="v-menu-item"
-                onClick={() => {
-                  setFrameMode("floating");
-                  localStorage.setItem(LS_FRAME, "floating");
-                  setMenuOpen(false);
-                }}
-              >
-                Floating
-              </button>
-            </div>
-          )}
+          <div className="v-toolwrap">
+            <button
+              type="button"
+              className="v-toolbtn"
+              aria-label="Toolbox"
+              onClick={() => {
+                setMenuToolsOpen((v) => !v);
+                setMenuCalOpen(false);
+              }}
+            >
+              <ToolboxIcon />
+            </button>
+            {menuToolsOpen && (
+              <div className="v-menu v-menu-tools">
+                <button
+                  className="v-menu-item"
+                  onClick={() => {
+                    setMenuToolsOpen(false);
+                    setShowNew(true);
+                  }}
+                >
+                  + New
+                </button>
+                <button
+                  className="v-menu-item"
+                  onClick={() => {
+                    setFrameMode("attached");
+                    localStorage.setItem(LS_FRAME, "attached");
+                    setMenuToolsOpen(false);
+                  }}
+                >
+                  Attached
+                </button>
+                <button
+                  className="v-menu-item"
+                  onClick={() => {
+                    setFrameMode("floating");
+                    localStorage.setItem(LS_FRAME, "floating");
+                    setMenuToolsOpen(false);
+                  }}
+                >
+                  Floating
+                </button>
+              </div>
+            )}
+          </div>
         </div>
 
-        {/* Plaque with “Cal” + side garlands */}
+        {/* Plaque with “Cal” + roses */}
         <div className="v-plaque">
           <img aria-hidden src="/roses-divider2.png" className="v-rose v-rose-left" />
           <div className="v-cal-logo">Cal</div>
           <img aria-hidden src="/roses-divider.png" className="v-rose v-rose-right" />
         </div>
-          
-        {/* Month title row (compact when not in Month view) */}
-        <div className={`v-monthbar ${viewType === "dayGridMonth" ? "" : "is-compact"}`}>
+
+        {/* Month title row (compact when not in Month) */}
+        <div className={`v-monthbar ${(!yearMode && viewType === "dayGridMonth") ? "" : "is-compact"}`}>
           <div className="v-year">{year}</div>
           <div className="v-month">{monthName}</div>
           <div className="v-year">{year}</div>
@@ -346,7 +409,6 @@ export default function App() {
             slotDuration="01:00:00"
             slotLabelInterval="01:00"
             timeZone="local"
-            /* 👇 fill the grid row completely — removes bottom blank space */
             height="100%"
             eventDisplay="block"
             events={events as EventInput[]}
@@ -377,14 +439,12 @@ export default function App() {
               const current = calRef.current?.getApi().getDate();
               if (current) {
                 localStorage.setItem(LS_DATE, current.toISOString());
-                setAnchor(current); // keep header in sync
+                setAnchor(current);
               }
               // keep events in range
-              const startStr = arg.startStr;
-              const endStr = arg.endStr;
-              reload(startStr, endStr);
-              // track view type for floating border logic
-              setViewType(arg.view.type);
+              reload(arg.startStr, arg.endStr);
+              // view type for styling; if yearMode, force "year"
+              setViewType(yearModeRef.current ? "year" : arg.view.type);
             }}
           />
         </main>
@@ -398,7 +458,7 @@ export default function App() {
         />
       )}
 
-      {/* New → parse (text/image) → hand off to EventModal */}
+      {/* New → parse (text/image) → EventModal */}
       <NewEventModal
         open={showNew}
         onClose={() => setShowNew(false)}

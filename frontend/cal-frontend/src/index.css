@@ -123,8 +123,13 @@ html, body {
 .v-monthbar.is-compact .v-month { font-size: 44px; letter-spacing: .05em; }
 .v-monthbar.is-compact .v-year  { font-size: 28px; }
 
-/* Toolbox (top-left) */
-.v-tools { position: fixed; top: 18px; left: 24px; z-index: 10; }
+/* Tools cluster (top-left): two stacked buttons + their menus */
+.v-tools {
+  position: fixed; top: 18px; left: 24px; z-index: 10;
+  display: grid; grid-auto-rows: min-content; gap: 8px;
+}
+.v-toolwrap { position: relative; }
+
 .v-toolbtn{
   width: 42px; height: 42px; display: grid; place-items: center;
   background: radial-gradient(115% 115% at 30% 25%, var(--bevel) 0%, var(--navface) 55%, #b79f75 100%);
@@ -134,6 +139,7 @@ html, body {
   color: var(--accent);
   cursor: pointer;
 }
+
 .v-menu{
   position: absolute; top: 48px; left: 0; width: 180px;
   background: var(--paper);
@@ -262,21 +268,25 @@ html, body {
   border-bottom: 0 !important;
 }
 
-/* Floating month:
+/* Floating month (and YEAR stub):
    - no right edge, no bottom edge
    - keep top outer border
    - remove last-column/last-row borders to avoid doubles */
-.v-paper > main.is-floating.view-month .fc-theme-standard .fc-scrollgrid{
+.v-paper > main.is-floating.view-month .fc-theme-standard .fc-scrollgrid,
+.v-paper > main.is-floating.view-year  .fc-theme-standard .fc-scrollgrid{
   border-top: var(--ledger-top) solid var(--ink) !important;
   border-left: 0 !important;
   border-right: 0 !important;
   border-bottom: 0 !important;
 }
 .v-paper > main.is-floating.view-month .fc .fc-col-header thead tr > th:last-child,
-.v-paper > main.is-floating.view-month .fc .fc-daygrid-body table > tbody > tr > td:last-child{
+.v-paper > main.is-floating.view-month .fc .fc-daygrid-body table > tbody > tr > td:last-child,
+.v-paper > main.is-floating.view-year  .fc .fc-col-header thead tr > th:last-child,
+.v-paper > main.is-floating.view-year  .fc .fc-daygrid-body table > tbody > tr > td:last-child{
   border-right: 0 !important;
 }
-.v-paper > main.is-floating.view-month .fc .fc-daygrid-body table > tbody > tr:last-child > td{
+.v-paper > main.is-floating.view-month .fc .fc-daygrid-body table > tbody > tr:last-child > td,
+.v-paper > main.is-floating.view-year  .fc .fc-daygrid-body table > tbody > tr:last-child > td{
   border-bottom: 0 !important;
 }
 
@@ -286,14 +296,18 @@ html, body {
   border-bottom: 0 !important;
 }
 .v-paper > main.is-floating.view-month .fc .fc-scrollgrid,
-.v-paper > main.is-floating.view-month .fc .fc-scrollgrid > tbody > tr > * {
+.v-paper > main.is-floating.view-month .fc .fc-scrollgrid > tbody > tr > *,
+.v-paper > main.is-floating.view-year  .fc .fc-scrollgrid,
+.v-paper > main.is-floating.view-year  .fc .fc-scrollgrid > tbody > tr > * {
   border-right: 0 !important;
 }
 .v-paper > main.is-floating .fc .fc-scrollgrid-sync-table tbody > tr:last-child > td {
   border-bottom: 0 !important;
 }
 .v-paper > main.is-floating.view-month .fc .fc-scrollgrid-sync-table thead tr > th:last-child,
-.v-paper > main.is-floating.view-month .fc .fc-scrollgrid-sync-table tbody tr > td:last-child {
+.v-paper > main.is-floating.view-month .fc .fc-scrollgrid-sync-table tbody tr > td:last-child,
+.v-paper > main.is-floating.view-year  .fc .fc-scrollgrid-sync-table thead tr > th:last-child,
+.v-paper > main.is-floating.view-year  .fc .fc-scrollgrid-sync-table tbody tr > td:last-child {
   border-right: 0 !important;
 }
 .v-paper > main.is-floating.view-week .fc .fc-timegrid-divider,
@@ -305,28 +319,32 @@ html, body {
   border-bottom: 0 !important;
 }
 
-/* Floating month: column alignment */
+/* Floating month/year: column alignment */
 .v-paper > main.is-floating.view-month .fc-col-header table,
 .v-paper > main.is-floating.view-month .fc-daygrid-body table,
-.v-paper > main.is-floating.view-month .fc-scrollgrid-sync-table {
+.v-paper > main.is-floating.view-month .fc-scrollgrid-sync-table,
+.v-paper > main.is-floating.view-year  .fc-col-header table,
+.v-paper > main.is-floating.view-year  .fc-daygrid-body table,
+.v-paper > main.is-floating.view-year  .fc-scrollgrid-sync-table {
   border-collapse: collapse !important;
   table-layout: fixed !important;
 }
 
 /* Use left borders for verticals so header/body align */
 .v-paper > main.is-floating.view-month .fc-col-header th,
-.v-paper > main.is-floating.view-month .fc-daygrid-body td {
+.v-paper > main.is-floating.view-month .fc-daygrid-body td,
+.v-paper > main.is-floating.view-year  .fc-col-header th,
+.v-paper > main.is-floating.view-year  .fc-daygrid-body td {
   border-left: var(--ledger-cell) solid var(--ink) !important;
   border-right: 0 !important;
 }
 .v-paper > main.is-floating.view-month .fc-col-header th:first-child,
-.v-paper > main.is-floating.view-month .fc-daygrid-body td:first-child {
+.v-paper > main.is-floating.view-month .fc-daygrid-body td:first-child,
+.v-paper > main.is-floating.view-year  .fc-col-header th:first-child,
+.v-paper > main.is-floating.view-year  .fc-daygrid-body td:first-child {
   border-left: 0 !important;
 }
-.v-paper > main.is-floating.view-month .fc-daygrid-body tr:last-child td {
+.v-paper > main.is-floating.view-month .fc-daygrid-body tr:last-child td,
+.v-paper > main.is-floating.view-year  .fc-daygrid-body tr:last-child td {
   border-bottom: 0 !important;
-}
-.v-paper > main.is-floating.view-month .fc-col-header th:last-child,
-.v-paper > main.is-floating.view-month .fc-daygrid-body td:last-child {
-  border-right: 0 !important;
 }
