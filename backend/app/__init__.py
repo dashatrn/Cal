@@ -1,5 +1,9 @@
-# new lines — load .env automatically 
-from dotenv import load_dotenv
-load_dotenv()
+# backend/app/__init__.py
+"""
+Package init: load environment variables from a .env file if present.
+This runs before app modules import os.getenv for configuration.
+"""
 
-#This line gets executed when the app package is imported, meaning .env will be loaded before any os.getenv(...) calls happen (like in  CORS middleware).
+from dotenv import load_dotenv
+
+load_dotenv()

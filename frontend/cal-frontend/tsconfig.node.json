@@ -1,5 +1,5 @@
 {
   "compilerOptions": {
-   "types": ["node"],   // ← only what you truly need
+    "types": ["node"] // minimal set needed here
   }
 }

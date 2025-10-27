@@ -3,19 +3,17 @@
 @tailwind components;
 @tailwind utilities;
 
-/* ─────────────────────────────────────────────────────────────────── */
-/* Global + theme tokens                                              */
-/* ─────────────────────────────────────────────────────────────────── */
+/* Global theme tokens */
 html.dark { color-scheme: dark; }
 html, body, #root { min-height: 100%; }
 #root { max-width: none; margin: 0; padding: 0; }
 
 :root{
-  --paper:   #bda982;  /* tan */
-  --ink:     #000000;  /* black */
-  --rail:    #373228;  /* page background */
-  --accent:  #85291d;  /* arrows + OCTOBER red (per request) */
-  --bevel:   #e9dec7;  /* light bevel */
+  --paper:   #bda982;
+  --ink:     #000000;
+  --rail:    #373228;
+  --accent:  #85291d;
+  --bevel:   #e9dec7;
   --navface: #cfb78f;
   --navring: #8c7a59;
 
@@ -29,9 +27,9 @@ html, body, #root { min-height: 100%; }
 
   /* Ledger widths */
   --ledger-top:   3px;
-  --ledger-side:  3px;   /* attached / left side thickness */
-  --ledger-right-weekday: 2px; /* slimmer right edge for floating week/day */
-  --ledger-cell:  2px;   /* cell grid lines */
+  --ledger-side:  3px;
+  --ledger-right-weekday: 2px;
+  --ledger-cell:  2px;
 }
 
 html, body {
@@ -40,9 +38,7 @@ html, body {
   font-family: "Times New Roman", Times, serif;
 }
 
-/* ─────────────────────────────────────────────────────────────────── */
-/* Paper container                                                     */
-/* ─────────────────────────────────────────────────────────────────── */
+/* Paper container */
 .v-paper {
   width: min(var(--paper-max), calc(100vw - var(--edge-gap) * 2));
   margin: 0 auto;
@@ -55,9 +51,7 @@ html, body {
   position: relative;
 }
 
-/* ─────────────────────────────────────────────────────────────────── */
-/* Plaque + roses                                                      */
-/* ─────────────────────────────────────────────────────────────────── */
+/* Plaque + roses */
 .v-plaque {
   margin: 22px 56px 10px;
   border: var(--ledger-side) solid var(--ink);
@@ -73,7 +67,7 @@ html, body {
   line-height: 1;
 }
 
-/* Roses beside “Cal” */
+/* Rose images beside “Cal” */
 :root{
   --roses-w:        220px;
   --roses-inset:     10px;
@@ -103,9 +97,7 @@ html, body {
 .v-plaque.roses-bottom .v-rose-left{ bottom: var(--roses-bottom-gap); top:auto; transform: rotate(180deg); }
 .v-plaque.roses-bottom .v-rose-right{ bottom: var(--roses-bottom-gap); top:auto; transform: none; }
 
-/* ─────────────────────────────────────────────────────────────────── */
-/* Month title row                                                     */
-/* ─────────────────────────────────────────────────────────────────── */
+/* Month title row */
 .v-monthbar {
   display: grid;
   grid-template-columns: 1fr auto 1fr;
@@ -131,9 +123,7 @@ html, body {
 .v-monthbar.is-compact .v-month { font-size: 44px; letter-spacing: .05em; }
 .v-monthbar.is-compact .v-year  { font-size: 28px; }
 
-/* ─────────────────────────────────────────────────────────────────── */
-/* Toolbox (top-left)                                                  */
-/* ─────────────────────────────────────────────────────────────────── */
+/* Toolbox (top-left) */
 .v-tools { position: fixed; top: 18px; left: 24px; z-index: 10; }
 .v-toolbtn{
   width: 42px; height: 42px; display: grid; place-items: center;
@@ -162,9 +152,7 @@ html, body {
 }
 .v-menu-item:active { transform: translateY(1px); }
 
-/* ─────────────────────────────────────────────────────────────────── */
-/* Outside nav arrows                                                  */
-/* ─────────────────────────────────────────────────────────────────── */
+/* Outside nav arrows */
 .v-nav{
   position: fixed; top: 50%; transform: translateY(-50%);
   width: var(--nav-diam); height: var(--nav-diam); border-radius: 999px;
@@ -180,19 +168,17 @@ html, body {
 }
 .v-arrow rect, .v-arrow path { fill: var(--accent) !important; }
 
-/* ─────────────────────────────────────────────────────────────────── */
-/* FullCalendar baseline                                               */
-/* ─────────────────────────────────────────────────────────────────── */
+/* FullCalendar base layout */
 .fc { background: var(--paper); }
 .fc .fc-view-harness { margin-bottom: 0 !important; height: 100% !important; }
 .v-paper > main { height: 100%; min-height: 0; }
 .fc .fc-scroller { height: 100% !important; overflow-y: auto !important; }
 
-/* Heavy ledger style for cells */
+/* Cell borders */
 .fc-theme-standard td,
 .fc-theme-standard th { border: var(--ledger-cell) solid var(--ink); }
 
-/* Keep only the TOP outer border by default (attached baseline) */
+/* Only keep top outer border by default */
 .v-paper .fc-theme-standard .fc-scrollgrid{
   border-left: 0 !important;
   border-right: 0 !important;
@@ -200,7 +186,7 @@ html, body {
   border-top: var(--ledger-top) solid var(--ink) !important;
 }
 
-/* Headers & numbers */
+/* Headers & day numbers */
 .fc .fc-col-header { background: transparent; }
 .fc .fc-col-header-cell-cushion {
   font-weight: 800; text-transform: uppercase; letter-spacing: .02em; padding: 8px 6px;
@@ -213,17 +199,17 @@ html, body {
 .fc .fc-timegrid-axis-cushion,
 .fc .fc-timegrid-slot-label { font-weight: 800; text-transform: uppercase; }
 
-/* Clean background */
+/* Neutral background */
 .fc .fc-day-today { background: transparent !important; }
 .fc .fc-day-sat, .fc .fc-day-sun { background: transparent; }
 
-/* Hide FC’s built-in toolbar; we render our own */
+/* Hide built-in toolbar (custom header used) */
 .fc .fc-toolbar { display: none !important; }
 
-/* Remove minor dotted half-hour lines */
+/* Remove minor half-hour lines */
 .fc .fc-timegrid-slot-minor { border-top: none !important; }
 
-/* Events style */
+/* Event appearance */
 .fc-event,
 .fc-daygrid-event,
 .fc-timegrid-event,
@@ -235,7 +221,7 @@ html, body {
 }
 .fc-event .fc-resizer { background: #000; }
 
-/* Week view: kill stray outlines around events */
+/* Week view: avoid stray event outlines */
 .v-paper > main.view-week .fc-timegrid-event,
 .v-paper > main.view-week .fc-timegrid-event .fc-event-main,
 .v-paper > main.view-week .fc-v-event,
@@ -243,36 +229,26 @@ html, body {
   border: 0 !important; box-shadow: none !important; outline: 0 !important;
 }
 
-/* ─────────────────────────────────────────────────────────────────── */
-/* Attached vs Floating                                                */
-/* App.tsx adds classes on <main>: is-attached / is-floating + view-* */
-/* ─────────────────────────────────────────────────────────────────── */
+/* Attached vs Floating (App.tsx toggles classes on <main>) */
 .v-paper > main.is-attached .fc { margin: 0; }
-
-/* Floating adds inner padding so the grid “floats” inside the paper */
 .v-paper > main.is-floating { padding: 8px 24px 24px 24px; overflow: hidden; }
 .v-paper > main.is-floating .fc { margin: 0; }
 
-/* Base suppression for floating: never draw bottom outer border */
+/* Floating: never draw bottom outer border */
 .v-paper > main.is-floating .fc-theme-standard .fc-scrollgrid{
   border-bottom: 0 !important;
 }
 
-/* ─────────────────────────────────────────────────────────────────── */
-/* FLOATING • WEEK & DAY                                               */
-/*   - Keep RIGHT edge but make it slimmer (2px)                       */
-/*   - No bottom edge                                                  */
-/*   - Avoid double-thick by removing last-column cell right borders   */
-/* ─────────────────────────────────────────────────────────────────── */
+/* Floating week/day:
+   - keep a slimmer right edge, no bottom edge
+   - remove right borders on last column to avoid double thickness */
 .v-paper > main.is-floating.view-week .fc-theme-standard .fc-scrollgrid,
 .v-paper > main.is-floating.view-day  .fc-theme-standard .fc-scrollgrid{
   border-top:  var(--ledger-top)  solid var(--ink) !important;
   border-left: var(--ledger-side) solid var(--ink) !important;
-  border-right: var(--ledger-right-weekday) solid var(--ink) !important; /* slimmer */
+  border-right: var(--ledger-right-weekday) solid var(--ink) !important;
   border-bottom: 0 !important;
 }
-
-/* Remove last-column borders (header + timegrid columns) */
 .v-paper > main.is-floating.view-week .fc .fc-col-header thead tr > th:last-child,
 .v-paper > main.is-floating.view-day  .fc .fc-col-header thead tr > th:last-child{
   border-right: 0 !important;
@@ -281,98 +257,55 @@ html, body {
 .v-paper > main.is-floating.view-day  .fc .fc-timegrid-cols table tr > td:last-child{
   border-right: 0 !important;
 }
-
-/* Remove bottom border on last visible time slots row */
 .v-paper > main.is-floating.view-week .fc .fc-timegrid-slots table > tbody > tr:last-child > td,
 .v-paper > main.is-floating.view-day  .fc .fc-timegrid-slots table > tbody > tr:last-child > td{
   border-bottom: 0 !important;
 }
 
-/* Belts & suspenders: ensure scrollgrid never contributes bottom */
-.v-paper > main.is-floating.view-week .fc-theme-standard .fc-scrollgrid,
-.v-paper > main.is-floating.view-day  .fc-theme-standard .fc-scrollgrid{
-  border-bottom: 0 !important;
-}
-
-/* ─────────────────────────────────────────────────────────────────── */
-/* FLOATING • MONTH                                                    */
-/*   - NO right edge                                                   */
-/*   - NO bottom edge                                                  */
-/*   - Keep only top outer border                                      */
-/*   - Remove last-column/last-row cell borders to avoid doubles       */
-/* ─────────────────────────────────────────────────────────────────── */
+/* Floating month:
+   - no right edge, no bottom edge
+   - keep top outer border
+   - remove last-column/last-row borders to avoid doubles */
 .v-paper > main.is-floating.view-month .fc-theme-standard .fc-scrollgrid{
   border-top: var(--ledger-top) solid var(--ink) !important;
   border-left: 0 !important;
-  border-right: 0 !important;   /* ← no right edge in month */
-  border-bottom: 0 !important;  /* ← no bottom edge */
+  border-right: 0 !important;
+  border-bottom: 0 !important;
 }
-
-/* Kill right edge formed by last column cells */
 .v-paper > main.is-floating.view-month .fc .fc-col-header thead tr > th:last-child,
 .v-paper > main.is-floating.view-month .fc .fc-daygrid-body table > tbody > tr > td:last-child{
   border-right: 0 !important;
 }
-
-/* Kill bottom edge formed by last row cells */
 .v-paper > main.is-floating.view-month .fc .fc-daygrid-body table > tbody > tr:last-child > td{
   border-bottom: 0 !important;
 }
 
-/* Extra specificity (some themes add borders on day containers) */
-.v-paper > main.is-floating.view-month .fc .fc-daygrid-body .fc-daygrid-day{
-  border-right-width: 0 !important;
-}
-.v-paper > main.is-floating.view-month .fc .fc-daygrid-body tr td:last-child{
-  border-right: 0 !important;
-}
-.v-paper > main.is-floating.view-month .fc .fc-daygrid-body tr:last-child .fc-daygrid-day,
-.v-paper > main.is-floating.view-month .fc .fc-daygrid-body tr:last-child td{
-  border-bottom: 0 !important;
-}
-
-/* ─────────────────────────────────────────────────────────────────── */
-/* HARD KILL: strays that still create edges in floating mode          */
-/* (Only raises specificity; does not change appearance elsewhere)     */
-/* ─────────────────────────────────────────────────────────────────── */
-
-/* 1) Absolutely no BOTTOM edge anywhere when floating (all views) */
+/* Hard stops: ensure wrappers don’t recreate edges in floating mode */
 .v-paper > main.is-floating .fc .fc-scrollgrid,
 .v-paper > main.is-floating .fc .fc-scrollgrid > tbody > tr > * {
   border-bottom: 0 !important;
 }
-
-/* 2) Absolutely no RIGHT edge in floating MONTH */
 .v-paper > main.is-floating.view-month .fc .fc-scrollgrid,
 .v-paper > main.is-floating.view-month .fc .fc-scrollgrid > tbody > tr > * {
   border-right: 0 !important;
 }
-
-/* 3) Ensure sync tables (header/body) can’t recreate edges */
 .v-paper > main.is-floating .fc .fc-scrollgrid-sync-table tbody > tr:last-child > td {
   border-bottom: 0 !important;
 }
-.v-paper > main.is-floating.view-month .fc .fc-scrollgrid-sync-table thead > tr > th:last-child,
-.v-paper > main.is-floating.view-month .fc .fc-scrollgrid-sync-table tbody > tr > td:last-child {
+.v-paper > main.is-floating.view-month .fc .fc-scrollgrid-sync-table thead tr > th:last-child,
+.v-paper > main.is-floating.view-month .fc .fc-scrollgrid-sync-table tbody tr > td:last-child {
   border-right: 0 !important;
 }
-
-/* 4) Timegrid-specific divider/footer lines */
 .v-paper > main.is-floating.view-week .fc .fc-timegrid-divider,
 .v-paper > main.is-floating.view-day  .fc .fc-timegrid-divider {
   border-bottom: 0 !important;
 }
-
-/* 5) Scroller harness wrappers sometimes add their own borders */
 .v-paper > main.is-floating .fc .fc-scroller-harness,
 .v-paper > main.is-floating .fc .fc-scroller {
   border-bottom: 0 !important;
 }
 
-
-/* ───────────────────────────────────────────────────────────── */
-/* Floating • MONTH — column alignment & no outer right/bottom   */
-/* ───────────────────────────────────────────────────────────── */
+/* Floating month: column alignment */
 .v-paper > main.is-floating.view-month .fc-col-header table,
 .v-paper > main.is-floating.view-month .fc-daygrid-body table,
 .v-paper > main.is-floating.view-month .fc-scrollgrid-sync-table {
@@ -380,77 +313,20 @@ html, body {
   table-layout: fixed !important;
 }
 
-/* Use ONLY left borders for the verticals so header/body align */
+/* Use left borders for verticals so header/body align */
 .v-paper > main.is-floating.view-month .fc-col-header th,
 .v-paper > main.is-floating.view-month .fc-daygrid-body td {
   border-left: var(--ledger-cell) solid var(--ink) !important;
   border-right: 0 !important;
 }
-
-/* Optional: remove outer left edge as well (keep if you like it) */
 .v-paper > main.is-floating.view-month .fc-col-header th:first-child,
 .v-paper > main.is-floating.view-month .fc-daygrid-body td:first-child {
   border-left: 0 !important;
 }
-
-/* No outer bottom edge */
 .v-paper > main.is-floating.view-month .fc-daygrid-body tr:last-child td {
   border-bottom: 0 !important;
 }
-
-/* No outer right edge (covers when last visible column is Friday/Sat) */
 .v-paper > main.is-floating.view-month .fc-col-header th:last-child,
 .v-paper > main.is-floating.view-month .fc-daygrid-body td:last-child {
   border-right: 0 !important;
-}
-
-/* Keep only the top border on the overall month grid */
-.v-paper > main.is-floating.view-month .fc-theme-standard .fc-scrollgrid {
-  border-top: var(--ledger-top) solid var(--ink) !important;
-  border-left: 0 !important;
-  border-right: 0 !important;
-  border-bottom: 0 !important;
-}
-
-
-
-/* ────────────────────────────────────────────────────────────────
-   FIX: Floating + Month
-   - remove any outer RIGHT edge (last column)
-   - draw verticals using LEFT borders only so header/body align
-   - keep no BOTTOM edge
-   ──────────────────────────────────────────────────────────────── */
-
-/* Use only LEFT borders for vertical lines (same on header & body) */
-.v-paper > main.is-floating.view-month .fc .fc-col-header th,
-.v-paper > main.is-floating.view-month .fc .fc-daygrid-body td {
-  border-left: var(--ledger-cell) solid var(--ink) !important;
-  border-right: 0 !important;
-  box-sizing: border-box;
-}
-
-/* No outer left edge (Saturday in your layout) */
-.v-paper > main.is-floating.view-month .fc .fc-col-header th:first-child,
-.v-paper > main.is-floating.view-month .fc .fc-daygrid-body td:first-child {
-  border-left: 0 !important;
-}
-
-/* Absolutely no RIGHT edge on the last column (FRI in your layout) */
-.v-paper > main.is-floating.view-month .fc .fc-col-header thead tr > th:last-child,
-.v-paper > main.is-floating.view-month .fc .fc-scrollgrid-sync-table thead tr > th:last-child,
-.v-paper > main.is-floating.view-month .fc .fc-daygrid-body table > tbody > tr > td:last-child {
-  border-right: 0 !important;
-}
-
-/* No outer bottom edge */
-.v-paper > main.is-floating.view-month .fc .fc-daygrid-body table > tbody > tr:last-child > td {
-  border-bottom: 0 !important;
-}
-
-/* Ensure header/body tables compute identical column widths */
-.v-paper > main.is-floating.view-month .fc-col-header table,
-.v-paper > main.is-floating.view-month .fc-daygrid-body table,
-.v-paper > main.is-floating.view-month .fc-scrollgrid-sync-table {
-  border-collapse: collapse !important;
-  table-layout: fixed !important;
 }

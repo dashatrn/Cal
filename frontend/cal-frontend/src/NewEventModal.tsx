@@ -17,7 +17,7 @@ export default function NewEventModal({ open, onClose, onSubmit }: Props) {
   const [busy, setBusy] = useState(false);
   const dropRef = useRef<HTMLLabelElement | null>(null);
 
-  // Clear state when the modal is closed
+  // Reset when closed
   useEffect(() => {
     if (!open) {
       setPrompt("");
@@ -27,7 +27,7 @@ export default function NewEventModal({ open, onClose, onSubmit }: Props) {
     }
   }, [open]);
 
-  // Debounced prompt -> /parse (with local timezone)
+  // Debounced /parse call
   useEffect(() => {
     if (!open) return;
     const t = setTimeout(async () => {
@@ -44,7 +44,6 @@ export default function NewEventModal({ open, onClose, onSubmit }: Props) {
     return () => clearTimeout(t);
   }, [prompt, open]);
 
-  // Handle file selection / drop (first file only)
   const handleFiles = async (files: FileList | null) => {
     const f = files?.[0];
     if (!f) return;
@@ -54,33 +53,32 @@ export default function NewEventModal({ open, onClose, onSubmit }: Props) {
       setFromImage(parsed);
     } catch (e) {
       console.error(e);
-      alert("Could not parse that image 😢");
+      alert("Could not parse that image.");
     } finally {
       setBusy(false);
     }
   };
 
-  // Merge: text overrides image
-const merged: PartialEvent = useMemo(() => {
-  const img = fromImage ?? {};
-  const txt = fromText ?? {};
-  return {
-    thumb: img.thumb ?? undefined,
-    title: txt.title || img.title,
-    start: txt.start || img.start,
-    end:   txt.end   || img.end,
-    repeatDays:      txt.repeatDays      || img.repeatDays,
-    repeatUntil:     txt.repeatUntil     || img.repeatUntil,
-    repeatEveryWeeks:txt.repeatEveryWeeks|| img.repeatEveryWeeks, // ← NEW
-  };
-}, [fromImage, fromText]);
+  // Text overrides image fields
+  const merged: PartialEvent = useMemo(() => {
+    const img = fromImage ?? {};
+    const txt = fromText ?? {};
+    return {
+      thumb: img.thumb ?? undefined,
+      title: txt.title || img.title,
+      start: txt.start || img.start,
+      end:   txt.end   || img.end,
+      repeatDays:       txt.repeatDays       || img.repeatDays,
+      repeatUntil:      txt.repeatUntil      || img.repeatUntil,
+      repeatEveryWeeks: txt.repeatEveryWeeks || img.repeatEveryWeeks,
+    };
+  }, [fromImage, fromText]);
 
   if (!open) return null;
 
   const dayNames = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
 
   const handleClose = () => {
-    // also clear state here to be extra safe
     setPrompt("");
     setFromImage(null);
     setFromText(null);
@@ -90,15 +88,11 @@ const merged: PartialEvent = useMemo(() => {
   return (
     <div className="fixed inset-0 z-30 grid place-items-center bg-black/40">
       <div className="w-[680px] max-w-[92vw] bg-white rounded shadow-lg overflow-hidden">
-        {/* Header */}
         <div className="px-5 py-4 border-b flex items-center justify-between">
           <h2 className="text-lg font-semibold">New</h2>
-          <button onClick={handleClose} className="text-sm opacity-70 hover:opacity-100">
-            Close
-          </button>
+          <button onClick={handleClose} className="text-sm opacity-70 hover:opacity-100">Close</button>
         </div>
 
-        {/* Body */}
         <div className="p-5 grid gap-4">
           {/* Drag & Drop */}
           <label
@@ -108,9 +102,7 @@ const merged: PartialEvent = useMemo(() => {
             className="relative group grid place-items-center rounded border-2 border-dashed border-gray-300 hover:border-gray-400 min-h-[240px] cursor-pointer bg-gray-50"
           >
             <div className="text-center px-6 py-8">
-              <p className="text-sm text-gray-600">
-                Drag & drop a screenshot/email here, or click to choose a file
-              </p>
+              <p className="text-sm text-gray-600">Drag & drop a screenshot/email here, or click to choose a file</p>
               {busy && <p className="text-xs mt-2">Scanning…</p>}
               {fromImage?.thumb && (
                 <div className="mt-3 flex items-center gap-2 justify-center">
@@ -119,12 +111,7 @@ const merged: PartialEvent = useMemo(() => {
                 </div>
               )}
             </div>
-            <input
-              type="file"
-              accept="image/*"
-              hidden
-              onChange={(e) => handleFiles(e.target.files)}
-            />
+            <input type="file" accept="image/*" hidden onChange={(e) => handleFiles(e.target.files)} />
           </label>
 
           {/* Prompt + Live Preview */}
@@ -132,11 +119,8 @@ const merged: PartialEvent = useMemo(() => {
             <div className="flex items-center justify-between">
               <span className="text-sm font-medium">Describe it</span>
 
-              {/* Hover preview */}
               <div className="relative group">
-                <button type="button" className="text-xs px-2 py-1 rounded border bg-white hover:bg-gray-50">
-                  Hover for preview
-                </button>
+                <button type="button" className="text-xs px-2 py-1 rounded border bg-white hover:bg-gray-50">Hover for preview</button>
                 <div className="absolute right-0 mt-2 w-80 rounded border bg-white shadow-lg p-3 text-sm hidden group-hover:block">
                   <p className="font-semibold mb-1">Preview</p>
                   {(merged.title || merged.start || merged.end || merged.repeatDays) ? (
@@ -149,10 +133,7 @@ const merged: PartialEvent = useMemo(() => {
                         {merged.repeatDays?.length ? merged.repeatDays.map(d => dayNames[d]).join(", ") : "—"}
                         {merged.repeatUntil ? ` (until ${merged.repeatUntil})` : ""}
                       </li>
-                      <li>
-                        <span className="text-gray-500">Every N weeks:</span>{" "}
-                        {merged.repeatEveryWeeks ?? "—"}
-                      </li>
+                      <li><span className="text-gray-500">Every N weeks:</span> {merged.repeatEveryWeeks ?? "—"}</li>
                     </ul>
                   ) : (
                     <p className="text-gray-500">Nothing parsed yet.</p>
@@ -173,18 +154,13 @@ const merged: PartialEvent = useMemo(() => {
 `}
               className="w-full border rounded px-3 py-2 resize-y"
             />
-            <p className="text-xs text-gray-500">
-              Tip: whatever you type here overrides what was extracted from the image.
-            </p>
+            <p className="text-xs text-gray-500">Text here overrides anything extracted from the image.</p>
           </div>
         </div>
 
-        {/* Footer */}
         <div className="px-5 py-4 border-t flex justify-end gap-2">
           <button onClick={handleClose} className="px-3 py-1">Cancel</button>
-          <button onClick={() => onSubmit(merged)} className="px-3 py-1 rounded bg-black text-white">
-            Next
-          </button>
+          <button onClick={() => onSubmit(merged)} className="px-3 py-1 rounded bg-black text-white">Next</button>
         </div>
       </div>
     </div>
