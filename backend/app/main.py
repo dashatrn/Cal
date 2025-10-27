@@ -1,5 +1,5 @@
 from datetime import datetime, date, timedelta, timezone
-from typing import Optional
+from typing import Optional, Tuple, Dict, Any
 from pathlib import Path
 import os
 import re
@@ -13,8 +13,12 @@ from sqlalchemy import select, and_, inspect
 from dateutil import parser as dtparse
 from dateutil.parser import isoparse as iso_parse
 from zoneinfo import ZoneInfo
+
 import pytesseract
 from PIL import Image
+
+# NEW: light-weight PDF text extraction
+from pypdf import PdfReader
 
 # ── local modules ───────────────────────────────────────────────────
 from .db import Base, engine, get_db
@@ -30,19 +34,15 @@ from fastapi.middleware.cors import CORSMiddleware
 def _clean(s: str | None) -> str | None:
     return s.strip().rstrip("/") if s and s.strip() else None
 
-# Dashboard sets this in production; we keep a safe default for dev
 FRONTEND_ORIGIN = _clean(os.getenv("FRONTEND_ORIGIN")) or "http://localhost:5173"
-
-# Optional comma-separated extra origins (e.g. during debugging)
 _raw_extra = os.getenv("EXTRA_CORS_ORIGINS", "")
 EXTRA = [x for x in (_clean(p) for p in _raw_extra.split(",")) if x]
-
 allow_origins = ["*"] if "*" in EXTRA else [o for o in {FRONTEND_ORIGIN, *EXTRA} if o]
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=allow_origins,
-    allow_credentials=False,      # no cookies/auth yet
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
     expose_headers=["*"],
@@ -54,20 +54,42 @@ UPLOAD_DIR = Path(__file__).resolve().parents[2] / "uploads"  # => /app/uploads
 UPLOAD_DIR.mkdir(exist_ok=True)
 app.mount("/uploads", StaticFiles(directory=UPLOAD_DIR), name="uploads")
 
-# ───────────────────────── Helpers: OCR ─────────────────────────────
+# ───────────────────────── OCR / PDF helpers ────────────────────────
 def ocr_to_text(data: bytes) -> str:
+    # Heuristic: tesseract likes PNG; write temp and read
     with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp:
         tmp.write(data)
         tmp_path = tmp.name
     try:
-        return pytesseract.image_to_string(Image.open(tmp_path))
+        # PSM 6: Assume a uniform block of text. OEM default.
+        return pytesseract.image_to_string(Image.open(tmp_path), config="--psm 6")
     finally:
         try:
             Path(tmp_path).unlink(missing_ok=True)
         except Exception:
             pass
 
-# ───────────────────────── Helpers: parsing ─────────────────────────
+def pdf_to_text(data: bytes) -> str:
+    # pypdf can read from file-like; simplest is temp file
+    with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
+        tmp.write(data)
+        pdf_path = tmp.name
+    try:
+        reader = PdfReader(pdf_path)
+        texts = []
+        for page in reader.pages:
+            try:
+                texts.append(page.extract_text() or "")
+            except Exception:
+                pass
+        return "\n".join(texts)
+    finally:
+        try:
+            Path(pdf_path).unlink(missing_ok=True)
+        except Exception:
+            pass
+
+# ───────────────────────── Regex & parsing helpers ──────────────────
 DOW_MAP = {
     "sunday": 0, "sun": 0,
     "monday": 1, "mon": 1,
@@ -76,6 +98,14 @@ DOW_MAP = {
     "thursday": 4, "thu": 4, "thur": 4, "thurs": 4,
     "friday": 5, "fri": 5,
     "saturday": 6, "sat": 6,
+}
+
+TZ_ABBR = {
+    # common US zones; default to standard where ambiguous
+    "ET": "America/New_York", "EST": "America/New_York", "EDT": "America/New_York",
+    "CT": "America/Chicago",  "CST": "America/Chicago",  "CDT": "America/Chicago",
+    "MT": "America/Denver",   "MST": "America/Denver",   "MDT": "America/Denver",
+    "PT": "America/Los_Angeles","PST":"America/Los_Angeles","PDT":"America/Los_Angeles",
 }
 
 TIME_RANGE_RE = re.compile(r"""
@@ -89,8 +119,8 @@ TIME_RANGE_RE = re.compile(r"""
 """, re.IGNORECASE | re.VERBOSE)
 
 TIME_SINGLE_RE = re.compile(r"\b(?P<h>\d{1,2})(?::(?P<m>\d{2}))?\s*(?P<ampm>[ap]m)?\b", re.IGNORECASE)
-DURATION_RE = re.compile(r"\bfor\s+(?:(?P<h>\d+)\s*(?:hours?|hrs?|h))?\s*(?:(?P<m>\d+)\s*(?:minutes?|mins?|m))?\b", re.IGNORECASE)
-UNTIL_RE    = re.compile(r"\buntil\s+(?P<date>(?:\d{1,2}/\d{1,2}(?:/\d{2,4})?|(?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)\w*\s+\d{1,2}(?:,\s*\d{4})?))", re.IGNORECASE)
+DURATION_RE = re.compile(r"\bfor\s+(?:(?P<h>\d+(?:\.\d+)?)\s*(?:hours?|hrs?|h))?\s*(?:(?P<m>\d+)\s*(?:minutes?|mins?|m))?\b", re.IGNORECASE)
+UNTIL_RE    = re.compile(r"\b(?:until|through)\s+(?P<date>(?:\d{1,2}/\d{1,2}(?:/\d{2,4})?|(?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)\w*\s+\d{1,2}(?:,\s*\d{4})?))", re.IGNORECASE)
 DAYS_LIST_RE = re.compile(r"""
     \b
     (?:(?:every|on)\s+)?                                  
@@ -98,7 +128,7 @@ DAYS_LIST_RE = re.compile(r"""
       (?:
         mon|monday|tue|tues|tuesday|wed|weds|wednesday|
         thu|thur|thurs|thursday|fri|friday|sat|saturday|
-        sun|sunday
+        sun|sunday|weekdays|weekday|daily|everyday
       )
       (?:\s*[/,]\s*
         (?:mon|monday|tue|tues|tuesday|wed|weds|wednesday|
@@ -108,24 +138,41 @@ DAYS_LIST_RE = re.compile(r"""
     )
     \b
 """, re.IGNORECASE | re.VERBOSE)
-DATE_TOKEN_RE   = re.compile(r"\b(?:\d{1,2}/\d{1,2}(?:/\d{2,4})?|(?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)\w*\s+\d{1,2})\b", re.IGNORECASE)
-EVERY_WEEKS_RE  = re.compile(r"\b(?:biweekly|every\s+other\s+week|every\s+(?P<n>\d+)\s+weeks?)\b", re.IGNORECASE)
-FOR_WEEKS_RE    = re.compile(r"\bfor\s+(?P<n>\d+)\s+weeks?\b", re.IGNORECASE)
+
+DATE_TOKEN_RE = re.compile(r"\b(?:\d{1,2}/\d{1,2}(?:/\d{2,4})?|(?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)\w*\s+\d{1,2}(?:,\s*\d{2,4})?)\b", re.IGNORECASE)
+DATE_RANGE_RE = re.compile(r"""
+    (?P<d1>\d{1,2}/\d{1,2}(?:/\d{2,4})?|(?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)\w*\s+\d{1,2}(?:,\s*\d{2,4})?)
+    \s*(?:-|–|—|to|through)\s*
+    (?P<d2>\d{1,2}/\d{1,2}(?:/\d{2,4})?|(?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)\w*\s+\d{1,2}(?:,\s*\d{2,4})?)
+""", re.IGNORECASE | re.VERBOSE)
+
+LOCATION_RE = re.compile(r"(?:\b@|\bat\b|\bin\b)\s+(?P<loc>[^,.;\n]+)", re.IGNORECASE)
+DESC_RE     = re.compile(r"\b(?:desc|notes?)\s*:\s*(?P<desc>.+)$", re.IGNORECASE | re.MULTILINE)
+TZ_RE       = re.compile(r"\b(ET|EST|EDT|CT|CST|CDT|MT|MST|MDT|PT|PST|PDT)\b", re.IGNORECASE)
 
 def to_24h(h: int, m: int, ampm: Optional[str]) -> tuple[int,int]:
     if ampm:
-        ampm = ampm.lower()
-        if ampm == "pm" and h != 12: h += 12
-        if ampm == "am" and h == 12: h = 0
+        a = ampm.lower()
+        if a == "pm" and h != 12: h += 12
+        if a == "am" and h == 12: h = 0
     return h, m
+
+def infer_missing_ampm(s_ampm: Optional[str], e_ampm: Optional[str]) -> Tuple[Optional[str], Optional[str]]:
+    # If one side has am/pm, assume the other is the same
+    if s_ampm and not e_ampm:
+        return s_ampm, s_ampm
+    if e_ampm and not s_ampm:
+        return e_ampm, e_ampm
+    return s_ampm, e_ampm
 
 def parse_time_range(text: str):
     m = TIME_RANGE_RE.search(text)
     if not m: return None
     s_h = int(m.group("s_h")); s_m = int(m.group("s_m") or 0)
     e_h = int(m.group("e_h")); e_m = int(m.group("e_m") or 0)
-    s_h, s_m = to_24h(s_h, s_m, m.group("s_ampm"))
-    e_h, e_m = to_24h(e_h, e_m, m.group("e_ampm"))
+    s_ampm, e_ampm = infer_missing_ampm(m.group("s_ampm"), m.group("e_ampm"))
+    s_h, s_m = to_24h(s_h, s_m, s_ampm)
+    e_h, e_m = to_24h(e_h, e_m, e_ampm)
     return (s_h, s_m, e_h, e_m)
 
 def parse_single_time_and_duration(text: str) -> Optional[tuple[int,int,int]]:
@@ -135,8 +182,11 @@ def parse_single_time_and_duration(text: str) -> Optional[tuple[int,int,int]]:
     h, m = to_24h(h, m, tm.group("ampm"))
     dm = DURATION_RE.search(text)
     if not dm: return None
-    dh = int(dm.group("h") or 0); dm_ = int(dm.group("m") or 0)
-    duration = dh*60 + dm_
+    # allow fractional hours eg "1.5h"
+    dh_raw = dm.group("h")
+    dh = float(dh_raw) if dh_raw else 0.0
+    mm = int(dm.group("m") or 0)
+    duration = int(round(dh*60 + mm))
     if duration <= 0: duration = 60
     return (h, m, duration)
 
@@ -158,6 +208,11 @@ def parse_days_list(text: str) -> Optional[list[int]]:
     m = DAYS_LIST_RE.search(text)
     if not m: return None
     raw = m.group("days")
+    t = raw.lower().strip()
+    if any(k in t for k in ["weekday", "weekdays"]):
+        return [1,2,3,4,5]
+    if any(k in t for k in ["daily", "everyday"]):
+        return [0,1,2,3,4,5,6]
     parts = re.split(r"[/,]\s*", raw)
     out: list[int] = []
     for p in parts:
@@ -171,12 +226,8 @@ def parse_days_list(text: str) -> Optional[list[int]]:
             out.append(DOW_MAP[key])
     return sorted(set(out)) or None
 
-def parse_repeat(text: str) -> Optional[list[int]]:
-    t = text.lower()
-    if "every weekday" in t or "weekdays" in t: return [1,2,3,4,5]
-    if "every day" in t or "everyday" in t or "daily" in t: return [0,1,2,3,4,5,6]
-    dl = parse_days_list(text)
-    return dl or None
+EVERY_WEEKS_RE  = re.compile(r"\b(?:biweekly|every\s+other\s+week|every\s+(?P<n>\d+)\s+weeks?)\b", re.IGNORECASE)
+FOR_WEEKS_RE    = re.compile(r"\bfor\s+(?P<n>\d+)\s+weeks?\b", re.IGNORECASE)
 
 def parse_every_weeks(text: str) -> Optional[int]:
     m = EVERY_WEEKS_RE.search(text)
@@ -193,13 +244,19 @@ def parse_for_weeks(text: str) -> Optional[int]:
     except Exception: return None
 
 def scrub_title(text: str) -> str:
-    t = UNTIL_RE.sub("", text)
+    # remove trailing control phrases to leave a clean title
+    t = DESC_RE.sub("", text)
+    t = UNTIL_RE.sub("", t)
     t = FOR_WEEKS_RE.sub("", t)
     t = EVERY_WEEKS_RE.sub("", t)
     t = DURATION_RE.sub("", t)
     t = TIME_RANGE_RE.sub("", t)
     t = re.sub(r"\b(daily|every\s+day|everyday|every\s+weekday|weekday|weekdays)\b", "", t, flags=re.I)
     t = DAYS_LIST_RE.sub("", t)
+    t = DATE_RANGE_RE.sub("", t)
+    t = DATE_TOKEN_RE.sub("", t)
+    t = LOCATION_RE.sub("", t)
+    t = TZ_RE.sub("", t)
     t = re.sub(r"\s{2,}", " ", t).strip(" ,.-\n\t")
     return (t or "Untitled").strip()
 
@@ -207,13 +264,23 @@ def build_iso(dt_local: datetime, tz: ZoneInfo) -> str:
     dt_local = dt_local.replace(tzinfo=tz)
     return dt_local.astimezone(ZoneInfo("UTC")).isoformat().replace("+00:00", "Z")
 
+def pick_tz(prompt_tz: Optional[str], fallback: ZoneInfo) -> ZoneInfo:
+    if not prompt_tz:
+        return fallback
+    abbr = prompt_tz.upper()
+    if abbr in TZ_ABBR:
+        return ZoneInfo(TZ_ABBR[abbr])
+    try:
+        return ZoneInfo(prompt_tz)
+    except Exception:
+        return fallback
+
 # ───────────────────────── DB migrations (optional) ─────────────────
 from alembic import command
 from alembic.config import Config
 
 def run_migrations() -> None:
-    """Run Alembic migrations using app-local alembic.ini."""
-    app_dir = Path(__file__).resolve().parent            # .../backend/app
+    app_dir = Path(__file__).resolve().parent
     cfg = Config(str(app_dir / "alembic.ini"))
     cfg.set_main_option("script_location", str(app_dir / "migrations"))
     if "DATABASE_URL" in os.environ:
@@ -221,7 +288,6 @@ def run_migrations() -> None:
     command.upgrade(cfg, "head")
 
 def ensure_event_columns(engine) -> None:
-    """Best-effort no-op if table missing; safe on Postgres/SQLite."""
     with engine.begin() as conn:
         insp = inspect(conn)
         try:
@@ -248,81 +314,33 @@ def health_check():
 def read_root():
     return {"message": "FastAPI backend is running."}
 
-# Optional but handy while validating database connectivity
 from sqlalchemy import text
 @app.get("/dbcheck")
 def dbcheck(db: Session = Depends(get_db)):
     db.execute(text("SELECT 1"))
     return {"db": "ok"}
 
-# ───────────────────────── Uploads → OCR ────────────────────────────
-@app.post("/uploads", status_code=201)
-async def upload_file(file: UploadFile = File(...)):
-    raw = await file.read()
-    ext = (Path(file.filename).suffix or ".png").lower()
-    filename = f"{uuid.uuid4().hex}{ext}"
-    dest = UPLOAD_DIR / filename
-    dest.write_bytes(raw)
-
-    text_ = ocr_to_text(raw)
-    print("──── OCR TEXT ────")
-    print(text_)
-    print("──────────────────")
-
-    date_re = re.compile(
-        r"\b(\d{4}[-/]\d{1,2}[-/]\d{1,2}|\d{1,2}[-/]\d{1,2}[-/]\d{2,4}|\w+\s+\d{1,2},\s*\d{4})\b",
-        re.IGNORECASE,
-    )
-    time_m = TIME_RANGE_RE.search(text_)
-    date_m = date_re.search(text_)
-    if not (date_m and time_m):
-        raise HTTPException(status_code=422, detail="Could not parse date/time")
-
-    date_iso = dtparse.parse(date_m.group(1)).date().isoformat()
-    tr = parse_time_range(text_)
-    if not tr:
-        raise HTTPException(status_code=422, detail="Could not parse time range")
-    s_h, s_m, e_h, e_m = tr
-
-    start_iso = f"{date_iso}T{str(s_h).zfill(2)}:{str(s_m).zfill(2)}:00"
-    end_iso   = f"{date_iso}T{str(e_h).zfill(2)}:{str(e_m).zfill(2)}:00"
-
-    lines = [ln.strip() for ln in text_.splitlines() if ln.strip()]
-    try:
-        date_idx = next(i for i, l in enumerate(lines) if date_re.search(l))
-        title = lines[date_idx + 2]
-    except Exception:
-        title = lines[0] if lines else "Untitled"
-    title = title[:200]
-
-    return {
-        "title": title,
-        "start": start_iso,
-        "end": end_iso,
-        "thumb": f"/uploads/{filename}",
-    }
-
-# ───────────────────────── Parse prompt (TZ aware) ──────────────────
-@app.post("/parse")
-async def parse_prompt(payload: dict):
+# ───────────────────────── Core NLP parser ──────────────────────────
+def parse_text_into_fields(raw_prompt: str, tz_name: str | None) -> Dict[str, Any]:
     """
-    Expects: { "prompt": string, "tz": "America/Los_Angeles" }
-    Returns: { title?, start?, end?, repeatDays?, repeatUntil?, repeatEveryWeeks? }
-    All times returned as UTC ISO Z; repeatUntil as YYYY-MM-DD (local date)
+    Returns: { title?, start?, end?, repeatDays?, repeatUntil?, repeatEveryWeeks?, location?, description? }
+    Times are UTC ISO Z. repeatUntil is local YYYY-MM-DD.
     """
-    prompt = (payload.get("prompt") or "").strip()
-    tz_name = payload.get("tz") or "UTC"
-    try:
-        tz = ZoneInfo(tz_name)
-    except Exception:
-        tz = ZoneInfo("UTC")
+    base_tz = ZoneInfo(tz_name) if tz_name else ZoneInfo("UTC")
 
-    if not prompt:
+    text = raw_prompt.strip()
+    if not text:
         return {}
 
-    raw = prompt
-    raw = re.sub(r"\bnoon\b", "12:00pm", raw, flags=re.I)
-    raw = re.sub(r"\bmidnight\b", "12:00am", raw, flags=re.I)
+    # normalize dashes, special words, and extract tz hint (ET/EST/etc.)
+    text = text.replace("—", "-").replace("–", "-")
+    text = re.sub(r"\bnoon\b", "12:00pm", text, flags=re.I)
+    text = re.sub(r"\bmidnight\b", "12:00am", text, flags=re.I)
+    tz_hint = None
+    mtz = TZ_RE.search(text)
+    if mtz:
+        tz_hint = mtz.group(1)
+    tz = pick_tz(tz_hint, base_tz)
 
     today = datetime.now(tz).date()
     WEEKDAY = {"mon":0,"tue":1,"tues":1,"wed":2,"thu":3,"thur":3,"thurs":3,"fri":4,"sat":5,"sun":6}
@@ -334,6 +352,7 @@ async def parse_prompt(payload: dict):
             delta = 7
         return base + timedelta(days=delta)
 
+    # relative dates → concrete yyyy-mm-dd
     def replace_relative(m: re.Match) -> str:
         w = m.group(0).lower()
         if w == "today":
@@ -348,19 +367,51 @@ async def parse_prompt(payload: dict):
             return d.isoformat()
         return w
 
-    raw = re.sub(
+    text = re.sub(
         r"\b(today|tomorrow|(?:this|next)\s+(?:mon|tue|tues|wed|thu|thur|thurs|fri|sat|sun))\b",
-        replace_relative, raw, flags=re.I
+        replace_relative, text, flags=re.I
     )
 
-    prompt = raw
+    # Extract optional location/description early so they don’t pollute title
+    location = None
+    mloc = LOCATION_RE.search(text)
+    if mloc:
+        location = mloc.group("loc").strip()
 
-    tr = parse_time_range(prompt)
-    s_h = s_m = e_h = e_m = None
+    description = None
+    mdesc = DESC_RE.search(text)
+    if mdesc:
+        description = mdesc.group("desc").strip()
+
+    # Date range (e.g., "Nov 1-3", "11/01-11/03")
+    range_m = DATE_RANGE_RE.search(text)
+    date_range: Tuple[Optional[date], Optional[date]] = (None, None)
+    if range_m:
+        try:
+            d1 = dtparse.parse(range_m.group("d1"), fuzzy=True, default=datetime.now(tz)).date()
+            d2 = dtparse.parse(range_m.group("d2"), fuzzy=True, default=datetime.now(tz)).date()
+            if d2 < d1:
+                d2 = date(d1.year + 1, d2.month, d2.day)  # naive wrap if needed
+            date_range = (d1, d2)
+        except Exception:
+            pass
+
+    # Find an explicit single date token (fallback)
+    explicit_date = None
+    if not date_range[0]:
+        try:
+            if DATE_TOKEN_RE.search(text):
+                dt = dtparse.parse(text, fuzzy=True, default=datetime.now(tz))
+                explicit_date = dt.date()
+        except Exception:
+            explicit_date = None
+
+    # Time extraction
+    tr = parse_time_range(text)
     if tr:
         s_h, s_m, e_h, e_m = tr
     else:
-        one = parse_single_time_and_duration(prompt)
+        one = parse_single_time_and_duration(text)
         if one:
             s_h, s_m, dur = one
             end_dt = datetime(2000, 1, 1, s_h, s_m) + timedelta(minutes=dur)
@@ -368,48 +419,107 @@ async def parse_prompt(payload: dict):
         else:
             s_h, s_m, e_h, e_m = (9, 0, 10, 0)
 
-    repeat_days = parse_repeat(prompt)
-    every_weeks = parse_every_weeks(prompt)
-    for_weeks   = parse_for_weeks(prompt)
-    until_d     = parse_until_date(prompt, tz)
+    # Repeat detection
+    repeat_days = parse_days_list(text) or None
+    every_weeks = parse_every_weeks(text)
+    for_weeks   = parse_for_weeks(text)
+    until_d     = parse_until_date(text, tz)
 
-    explicit_date = None
-    try:
-        if DATE_TOKEN_RE.search(prompt):
-            dt = dtparse.parse(prompt, fuzzy=True, default=datetime.now(tz))
-            explicit_date = dt.date()
-    except Exception:
-        explicit_date = None
+    # Range drives repeatUntil if present
+    if date_range[0] and date_range[1]:
+        # If no explicit repeat days provided, default to every day across the range
+        if not repeat_days:
+            repeat_days = [0,1,2,3,4,5,6]
+        until_d = date_range[1]
 
-    today_local = datetime.now(tz).date()
-    base_date = explicit_date or today_local
+    # Fallback base date
+    base_date = explicit_date or date_range[0] or today
 
+    # If “every N weeks” provided but no repeat days: use the weekday of base_date
     if every_weeks and not repeat_days:
         js_dow = (base_date.weekday() + 1) % 7  # Mon=0..Sun=6 → Sun=0..Sat=6
         repeat_days = [js_dow]
 
+    # “for X weeks” without an explicit until date
     if for_weeks and not until_d:
         until_d = base_date + timedelta(weeks=for_weeks)
 
-    title = scrub_title(prompt)
+    # Title after scrubbing control phrases
+    title = scrub_title(text)
 
+    # Build ISO (timezone aware)
     start_local = datetime(base_date.year, base_date.month, base_date.day, s_h, s_m, 0)
     end_local   = datetime(base_date.year, base_date.month, base_date.day, e_h, e_m, 0)
     if end_local <= start_local:
         end_local += timedelta(hours=1)
 
     start_iso = build_iso(start_local, tz)
-    end_iso   = build_iso(end_local, tz)
+    end_iso   = build_iso(end_local,   tz)
 
-    out: dict = { "title": title, "start": start_iso, "end": end_iso }
-    if repeat_days:
-        out["repeatDays"] = repeat_days
-    if until_d:
-        out["repeatUntil"] = until_d.isoformat()
-    if every_weeks:
-        out["repeatEveryWeeks"] = every_weeks
-
+    out: Dict[str, Any] = { "title": title, "start": start_iso, "end": end_iso }
+    if location: out["location"] = location
+    if description: out["description"] = description
+    if repeat_days: out["repeatDays"] = repeat_days
+    if until_d: out["repeatUntil"] = until_d.isoformat()
+    if every_weeks: out["repeatEveryWeeks"] = every_weeks
     return out
+
+# ───────────────────────── Uploads → OCR/PDF → parse ────────────────
+@app.post("/uploads", status_code=201)
+async def upload_file(file: UploadFile = File(...)):
+    raw = await file.read()
+    ext = (Path(file.filename).suffix or ".bin").lower()
+    filename = f"{uuid.uuid4().hex}{ext}"
+    dest = UPLOAD_DIR / filename
+    dest.write_bytes(raw)
+
+    # Extract text based on type
+    text_ = ""
+    is_image = ext in {".png", ".jpg", ".jpeg", ".webp", ".tif", ".tiff", ".bmp"}
+    is_pdf = ext == ".pdf"
+
+    try:
+        if is_image:
+            text_ = ocr_to_text(raw)
+        elif is_pdf:
+            text_ = pdf_to_text(raw)
+        else:
+            # Fallback: try OCR anyway (e.g., unknown image)
+            text_ = ocr_to_text(raw)
+    except Exception:
+        raise HTTPException(status_code=422, detail="Could not read that file")
+
+    # Use our core parser (no tz passed here — client will localize after)
+    fields = parse_text_into_fields(text_, None)
+
+    # Provide thumb only for images (frontend shows a tiny preview)
+    if is_image:
+        fields["thumb"] = f"/uploads/{filename}"
+
+    # Basic sanity: if we couldn’t find both date and time, signal a 422
+    if not fields.get("start") or not fields.get("end"):
+        raise HTTPException(status_code=422, detail="Could not parse date/time from the file")
+
+    return fields
+
+# ───────────────────────── Parse prompt (TZ aware) ──────────────────
+@app.post("/parse")
+async def parse_prompt(payload: dict):
+    """
+    Expects: { "prompt": string, "tz": "America/Los_Angeles" or "ET"/"EST"/... }
+    Returns: { title?, start?, end?, repeatDays?, repeatUntil?, repeatEveryWeeks?, location?, description? }
+    All times returned as UTC ISO Z; repeatUntil as YYYY-MM-DD (local date)
+    """
+    prompt = (payload.get("prompt") or "").strip()
+    tz_name = payload.get("tz") or "UTC"
+    if not prompt:
+        return {}
+    try:
+        # If tz is an abbreviation, parse_text_into_fields will map it
+        return parse_text_into_fields(prompt, tz_name)
+    except Exception:
+        # Be forgiving; worst case, return empty so UI can continue
+        return {}
 
 # ───────────────────────── Suggest next free slot ───────────────────
 @app.get("/suggest")
