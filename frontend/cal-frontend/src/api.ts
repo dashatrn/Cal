@@ -1,26 +1,17 @@
 // src/api.ts
 import axios from "axios";
 
-/**
- * API base URL:
- * - Prefer Vite build-time env (VITE_API_URL).
- * - Fall back to your deployed API URL to keep the app functional if env is missing.
- */
-let BASE_URL =
-  (import.meta.env.VITE_API_URL as string | undefined)?.replace(/\/+$/, "") ||
-  "https://cal-api-otk8.onrender.com"; // <-- replace with YOUR API External URL
+const DEV = import.meta.env.DEV;
 
-if (!/^https?:\/\//i.test(BASE_URL)) {
-  console.error("[cal] Invalid BASE_URL:", BASE_URL);
-}
+// In dev: use relative paths and let Vite proxy -> backend:8000 (as in vite.config.ts)
+// In prod: use the absolute API URL provided at build time.
+const BASE_URL = DEV ? "" : (import.meta.env.VITE_API_URL as string);
 
 export { BASE_URL };
-
-/**
- * Let axios pick headers per request.
- * Don't set a global Content-Type to avoid unnecessary preflights.
- */
-export const api = axios.create({ baseURL: BASE_URL });
+export const api = axios.create({
+  baseURL: BASE_URL,
+  withCredentials: false, // will flip to true when we move to cookie auth
+});
 
 export interface EventIn {
   title: string;
