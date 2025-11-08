@@ -16,6 +16,8 @@ import type { EventOut as ApiEvent, EventIn } from "./api";
 import EventModal from "./EventModal";
 import NewEventModal from "./NewEventModal";
 
+import YearView from "./YearView"; // ⬅️ NEW
+
 import "./index.css";
 import "./App.css";
 
@@ -102,7 +104,7 @@ export default function App() {
   // current FC view type for styling
   const [viewType, setViewType] = useState<string>("timeGridWeek");
 
-  // pseudo Year mode flag (renders Month grid but treats UX as "Year")
+  // TRUE = show our custom YearView instead of FC month
   const [yearMode, setYearMode] = useState<boolean>(() => {
     return typeof window !== "undefined" && localStorage.getItem(LS_YEAR) === "1";
   });
@@ -115,9 +117,29 @@ export default function App() {
     return saved === "floating" ? "floating" : "attached";
   });
 
+  // Request YearView to scroll to a specific month when arrows are used
+  const [yearJump, setYearJump] = useState<Date | undefined>(undefined);
+
   const gotoDate = (iso: string) => calRef.current?.getApi().gotoDate(iso);
-  const gotoPrev = () => calRef.current?.getApi().prev();
-  const gotoNext = () => calRef.current?.getApi().next();
+
+  const gotoPrev = () => {
+    if (yearModeRef.current) {
+      const prev = new Date(anchor.getFullYear(), anchor.getMonth() - 1, 1);
+      setYearJump(prev);
+      setAnchor(prev);
+    } else {
+      calRef.current?.getApi().prev();
+    }
+  };
+  const gotoNext = () => {
+    if (yearModeRef.current) {
+      const next = new Date(anchor.getFullYear(), anchor.getMonth() + 1, 1);
+      setYearJump(next);
+      setAnchor(next);
+    } else {
+      calRef.current?.getApi().next();
+    }
+  };
 
   // reload events for a range
   const reload = (start?: string, end?: string) =>
@@ -139,20 +161,19 @@ export default function App() {
       const savedView = localStorage.getItem(LS_VIEW) as any;
       const savedDate = localStorage.getItem(LS_DATE) as any;
       if (api) {
-        if (savedView) api.changeView(savedView);
-        if (savedDate) api.gotoDate(savedDate);
-        else if (loaded.length) api.gotoDate(loaded[loaded.length - 1]!.start);
+        if (savedView && !yearModeRef.current) api.changeView(savedView);
+        if (savedDate && !yearModeRef.current) api.gotoDate(savedDate);
+        else if (loaded.length && !yearModeRef.current) api.gotoDate(loaded[loaded.length - 1]!.start);
 
-        // If year mode was on last time, reflect that (keeps month grid)
         if (localStorage.getItem(LS_YEAR) === "1") {
           setYearMode(true);
-          setViewType("year"); // treat as year for styling/logic
+          setViewType("year"); // tag for styling
         } else {
           setViewType(api?.view?.type || "timeGridWeek");
         }
       }
-      const current = api?.getDate();
-      if (current) setAnchor(current);
+      const current = api?.getDate() || new Date();
+      setAnchor(current);
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -270,8 +291,13 @@ export default function App() {
 
   // -------- Mini calendar actions --------
   const goToday = () => {
-    // Always go to "today" within current mode (week/month/year)
-    calRef.current?.getApi().today();
+    if (yearModeRef.current) {
+      const now = new Date();
+      setYearJump(now);
+      setAnchor(now);
+    } else {
+      calRef.current?.getApi().today();
+    }
     setMenuCalOpen(false);
   };
 
@@ -292,13 +318,66 @@ export default function App() {
   };
 
   const setYear = () => {
-    // Stub "Year mode": keep Month grid but tag UI/logic as "year"
-    calRef.current?.getApi().changeView("dayGridMonth");
+    // Real Year view now
     setYearMode(true);
     localStorage.setItem(LS_YEAR, "1");
     setViewType("year");
     setMenuCalOpen(false);
   };
+
+  // ---------- Helpers for hover/click behaviors ----------
+  function armMonthTopHover(arg: any) {
+    if (arg.view?.type !== "dayGridMonth" || yearModeRef.current) return;
+    const cellEl: HTMLElement = arg.el;
+    const top = cellEl.querySelector<HTMLElement>(".fc-daygrid-day-top");
+    if (!top) return;
+
+    const date = arg.date;
+
+    const enter = () => {
+      cellEl.classList.add("is-hover");
+      top.classList.add("hover-armed");
+    };
+    const leave = () => {
+      cellEl.classList.remove("is-hover");
+      top.classList.remove("hover-armed");
+    };
+    const click = () => {
+      // open Day view for that date
+      calRef.current?.getApi().changeView("timeGridDay", date);
+    };
+
+    top.addEventListener("mouseenter", enter);
+    top.addEventListener("mouseleave", leave);
+    top.addEventListener("click", click);
+  }
+
+  function armWeekHeaderHover(arg: any) {
+    if (arg.view?.type !== "timeGridWeek") return;
+
+    const th: HTMLElement = arg.el;
+    const dateStr = arg.date?.toISOString?.().slice(0, 10);
+    if (!dateStr) return;
+
+    const columns = () =>
+      Array.from(document.querySelectorAll<HTMLElement>(`.fc-timegrid-col[data-date="${dateStr}"]`));
+
+    const enter = () => {
+      th.classList.add("is-hover");
+      columns().forEach((c) => c.classList.add("is-hover"));
+    };
+    const leave = () => {
+      th.classList.remove("is-hover");
+      columns().forEach((c) => c.classList.remove("is-hover"));
+    };
+    const click = () => {
+      calRef.current?.getApi().changeView("timeGridDay", arg.date);
+    };
+
+    th.addEventListener("mouseenter", enter);
+    th.addEventListener("mouseleave", leave);
+    th.addEventListener("click", click);
+  }
 
   return (
     <>
@@ -400,53 +479,63 @@ export default function App() {
 
         {/* Calendar */}
         <main className={`relative flex-1 min-h-0 px-0 pb-0 ${frameClass} ${viewClass}`}>
-          <FullCalendar
-            ref={calRef}
-            plugins={[dayGridPlugin, timeGridPlugin, interactionPlugin]}
-            initialView="timeGridWeek"
-            headerToolbar={false}
-            allDaySlot={false}
-            slotDuration="01:00:00"
-            slotLabelInterval="01:00"
-            timeZone="local"
-            height="100%"
-            eventDisplay="block"
-            events={events as EventInput[]}
-            editable={true}
-            eventDrop={onEventDrop}
-            eventResize={onEventResize}
-            eventContent={renderEvent}
-            eventDidMount={(info) => {
-              const desc = info.event.extendedProps?.description as string | undefined;
-              const loc = info.event.extendedProps?.location as string | undefined;
-              const bits = [loc, desc].filter(Boolean);
-              if (bits.length) info.el.title = bits.join("\n\n");
-            }}
-            scrollTime="00:00:00"
-            slotMinTime="00:00:00"
-            slotMaxTime="24:00:00"
-            slotLabelFormat={[{ hour: "numeric", meridiem: "short" }]}
-            dayHeaderContent={(args) => headerLabel(args.date, args.view.type)}
-            firstDay={0} // Sunday
-            dateClick={(arg: DateClickArg) => openCreate(arg.dateStr)}
-            eventClick={(arg: EventClickArg) => {
-              const e = events.find((x) => x.id === arg.event.id);
-              if (e) openEdit({ ...e, id: +e.id });
-            }}
-            datesSet={(arg) => {
-              // persist view/date
-              localStorage.setItem(LS_VIEW, arg.view.type);
-              const current = calRef.current?.getApi().getDate();
-              if (current) {
-                localStorage.setItem(LS_DATE, current.toISOString());
-                setAnchor(current);
-              }
-              // keep events in range
-              reload(arg.startStr, arg.endStr);
-              // view type for styling; if yearMode, force "year"
-              setViewType(yearModeRef.current ? "year" : arg.view.type);
-            }}
-          />
+          {yearMode ? (
+            <YearView
+              jumpTo={yearJump}
+              onAnchorChange={(d) => setAnchor(d)}
+            />
+          ) : (
+            <FullCalendar
+              ref={calRef}
+              plugins={[dayGridPlugin, timeGridPlugin, interactionPlugin]}
+              initialView="timeGridWeek"
+              headerToolbar={false}
+              allDaySlot={false}
+              slotDuration="01:00:00"
+              slotLabelInterval="01:00"
+              timeZone="local"
+              height="100%"
+              eventDisplay="block"
+              events={events as EventInput[]}
+              editable={true}
+              eventDrop={onEventDrop}
+              eventResize={onEventResize}
+              eventContent={renderEvent}
+              eventDidMount={(info) => {
+                const desc = info.event.extendedProps?.description as string | undefined;
+                const loc = info.event.extendedProps?.location as string | undefined;
+                const bits = [loc, desc].filter(Boolean);
+                if (bits.length) info.el.title = bits.join("\n\n");
+              }}
+              scrollTime="00:00:00"
+              slotMinTime="00:00:00"
+              slotMaxTime="24:00:00"
+              slotLabelFormat={[{ hour: "numeric", meridiem: "short" }]}
+              dayHeaderContent={(args) => headerLabel(args.date, args.view.type)}
+              firstDay={0} // Sunday
+              dateClick={(arg: DateClickArg) => openCreate(arg.dateStr)}
+              eventClick={(arg: EventClickArg) => {
+                const e = events.find((x) => x.id === arg.event.id);
+                if (e) openEdit({ ...e, id: +e.id });
+              }}
+              datesSet={(arg) => {
+                // persist view/date
+                localStorage.setItem(LS_VIEW, arg.view.type);
+                const current = calRef.current?.getApi().getDate();
+                if (current) {
+                  localStorage.setItem(LS_DATE, current.toISOString());
+                  setAnchor(current);
+                }
+                // keep events in range
+                reload(arg.startStr, arg.endStr);
+                setViewType(arg.view.type);
+              }}
+
+              /* ✨ NEW: behaviors */
+              dayCellDidMount={armMonthTopHover}
+              dayHeaderDidMount={armWeekHeaderHover}
+            />
+          )}
         </main>
       </div>
 

@@ -348,3 +348,153 @@ html, body {
 .v-paper > main.is-floating.view-year  .fc-daygrid-body tr:last-child td {
   border-bottom: 0 !important;
 }
+
+/* ============ TODAY SHADING (week & day) ============ */
+.v-paper > main.view-week .fc .fc-day-today,
+.v-paper > main.view-day  .fc .fc-day-today {
+  /* Slightly transparent dark red (matches --accent #85291d) */
+  background: rgba(133, 41, 29, 0.10) !important;
+}
+
+/* ============ MONTH VIEW: top-line hover to open Day ============ */
+.fc .fc-daygrid-day.is-hover {
+  /* crisp border highlight on the cell */
+  box-shadow: inset 0 0 0 2px var(--accent);
+}
+.fc .fc-daygrid-day-top.hover-armed {
+  cursor: pointer;
+  background: rgba(133, 41, 29, 0.06);
+}
+
+/* ============ WEEK VIEW: hover header → highlight whole column ============ */
+.fc .fc-col-header-cell.is-hover {
+  /* thin underline/overline for feedback */
+  box-shadow: inset 0 -2px 0 0 var(--accent), inset 0 2px 0 0 var(--accent);
+}
+.fc .fc-timegrid-col.is-hover {
+  /* outline entire day column */
+  box-shadow: inset 0 0 0 2px var(--accent);
+  background-image: linear-gradient(to bottom, rgba(133, 41, 29, 0.06), rgba(133, 41, 29, 0.06));
+}
+
+/* ============ FLOATING MONTH/YEAR: harden alignment & kill stray right edge ============ */
+.v-paper > main.is-floating.view-month .fc .fc-col-header table,
+.v-paper > main.is-floating.view-month .fc .fc-daygrid-body table,
+.v-paper > main.is-floating.view-year  .fc .fc-col-header table,
+.v-paper > main.is-floating.view-year  .fc .fc-daygrid-body table {
+  border-collapse: collapse !important;
+  table-layout: fixed !important;
+  border-spacing: 0 !important;
+}
+
+/* Use left borders for vertical lines so header/body align perfectly */
+.v-paper > main.is-floating.view-month .fc-col-header th,
+.v-paper > main.is-floating.view-month .fc-daygrid-body td,
+.v-paper > main.is-floating.view-year  .fc-col-header th,
+.v-paper > main.is-floating.view-year  .fc-daygrid-body td {
+  border-left: var(--ledger-cell) solid var(--ink) !important;
+  border-right: 0 !important;
+}
+.v-paper > main.is-floating.view-month .fc-col-header th:first-child,
+.v-paper > main.is-floating.view-month .fc-daygrid-body td:first-child,
+.v-paper > main.is-floating.view-year  .fc-col-header th:first-child,
+.v-paper > main.is-floating.view-year  .fc-daygrid-body td:first-child {
+  border-left: 0 !important;
+}
+
+/* Absolute last column/row must not show a right/bottom edge */
+.v-paper > main.is-floating.view-month .fc .fc-col-header thead tr > th:last-child,
+.v-paper > main.is-floating.view-month .fc .fc-daygrid-body table > tbody > tr > td:last-child,
+.v-paper > main.is-floating.view-month .fc .fc-daygrid-body table > tbody > tr:last-child > td,
+.v-paper > main.is-floating.view-year  .fc .fc-col-header thead tr > th:last-child,
+.v-paper > main.is-floating.view-year  .fc .fc-daygrid-body table > tbody > tr > td:last-child,
+.v-paper > main.is-floating.view-year  .fc .fc-daygrid-body table > tbody > tr:last-child > td {
+  border-right: 0 !important;
+  border-bottom: 0 !important;
+}
+
+/* Stray right border coming from wrapper cells — shut it off */
+.v-paper > main.is-floating.view-month .fc .fc-scrollgrid > tbody > tr > *:last-child,
+.v-paper > main.is-floating.view-year  .fc .fc-scrollgrid > tbody > tr > *:last-child {
+  border-right: 0 !important;
+}
+
+/* ============ YEAR VIEW styling ============ */
+.yv-wrap {
+  height: 100%;
+  overflow: auto;
+  padding: 8px 18px 18px 18px;
+}
+
+.yv-yearsection {
+  margin: 10px 6px 18px;
+  border: var(--ledger-side) solid var(--ink);
+  background: #fffdf7;
+}
+
+.yv-yearhdr {
+  font-weight: 800;
+  font-size: 22px;
+  letter-spacing: .02em;
+  padding: 6px 10px;
+  border-bottom: var(--ledger-top) solid var(--ink);
+  background: #f4eada;
+}
+
+.yv-yeargrid {
+  /* 3 columns like Apple’s year view; responsive down to 2/1 on narrow widths */
+  display: grid;
+  grid-template-columns: repeat(3, minmax(220px, 1fr));
+  gap: 10px;
+  padding: 10px;
+}
+
+@media (max-width: 1050px) {
+  .yv-yeargrid { grid-template-columns: repeat(2, minmax(220px, 1fr)); }
+}
+@media (max-width: 740px) {
+  .yv-yeargrid { grid-template-columns: 1fr; }
+}
+
+.yv-month {
+  border: 2px solid var(--ink);
+  background: #fff;
+}
+
+.yv-monthname {
+  font-weight: 700;
+  text-align: center;
+  padding: 6px 0 4px;
+  color: var(--accent);
+}
+
+.yv-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  grid-auto-rows: 20px;
+  padding: 6px 6px 10px;
+}
+
+.yv-dow {
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+  text-align: center;
+  opacity: .85;
+  border-bottom: 1px solid rgba(0,0,0,.2);
+}
+
+.yv-cell {
+  font-size: 12px;
+  text-align: right;
+  padding: 2px 4px;
+  border-left: 1px solid rgba(0,0,0,.15);
+  border-bottom: 1px solid rgba(0,0,0,.15);
+  min-height: 20px;
+}
+.yv-cell:nth-child(7n+1) { border-left: 0; } /* first column */
+.yv-cell.is-today {
+  background: rgba(133, 41, 29, 0.12);
+  font-weight: 700;
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
