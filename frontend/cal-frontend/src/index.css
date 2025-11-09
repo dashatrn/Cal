@@ -13,6 +13,7 @@ html, body, #root { min-height: 100%; }
   --ink:     #000000;
   --rail:    #373228;
   --accent:  #85291d;
+  --accenthover:  #85291d88;
   --bevel:   #e9dec7;
   --navface: #cfb78f;
   --navring: #8c7a59;
@@ -333,11 +334,11 @@ html, body {
 
 /* Week: hover header -> highlight whole column */
 .fc .fc-col-header-cell.is-hover {
-  background-image: linear-gradient(to bottom, rgba(85, 29, 22, 0.603), rgba(85, 29, 22, 0.603));
+  background-image: linear-gradient(to bottom, var(--accenthover), var(--accenthover));
 } 
 .fc .fc-timegrid-col.is-hover {
   box-shadow: inset 0 0 0 2px var(--accent);
-  background-image: linear-gradient(to bottom, rgba(133, 41, 29, 0.06), rgba(133, 41, 29, 0.06));
+  background-image: linear-gradient(to bottom, rgba(133, 41, 29, 0.26), rgba(133, 41, 29, 0.26));
 }
 
 
