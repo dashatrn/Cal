@@ -284,9 +284,14 @@ export default function App() {
   };
 
   const setYear = () => {
+    // Jump Year view to whatever date you’re currently on in month/week/day
+    const api = calRef.current?.getApi();
+    const cur = api?.getDate() || new Date();
     setYearMode(true);
     localStorage.setItem(LS_YEAR, "1");
     setViewType("year");
+    setYearJump(cur);
+    setAnchor(cur);
     setMenuCalOpen(false);
   };
 

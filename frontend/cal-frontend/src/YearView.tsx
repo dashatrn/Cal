@@ -2,10 +2,9 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 /**
  * A lightweight, scrollable Year view that:
+ *  - opens centered on the requested/current month
  *  - extends infinitely in both directions as you scroll
  *  - never hides the top banner (scroll happens INSIDE main)
- *  - uses the same “paper” palette (no stark white)
- *  - reports an anchor date so the big header stays in sync
  */
 type Props = {
   /** Month to jump/center to (we'll ensure it's in range and scroll it into view). */
@@ -59,10 +58,11 @@ function MonthTile({ y, m }: { y: number; m: number }) {
 export default function YearView({ jumpTo, onAnchorChange }: Props) {
   const hostRef = useRef<HTMLDivElement | null>(null);
 
-  // Start with a generous window and extend as needed.
+  // Start with a generous window both directions so you can immediately scroll up or down.
   const base = jumpTo ?? new Date();
-  const [startYear, setStartYear] = useState<number>(base.getFullYear() - 10);
-  const [endYear, setEndYear]     = useState<number>(base.getFullYear() + 10);
+  const baseYear = base.getFullYear();
+  const [startYear, setStartYear] = useState<number>(baseYear - 20);
+  const [endYear, setEndYear]     = useState<number>(baseYear + 20);
 
   const years = useMemo(() => {
     const ys: number[] = [];
@@ -130,24 +130,25 @@ export default function YearView({ jumpTo, onAnchorChange }: Props) {
     return () => observer.disconnect();
   }, [years, onAnchorChange]);
 
-  // Jump to a month (used by the outer arrows)
+  // Jump to a month (used by the outer arrows and when switching into Year view)
   useEffect(() => {
     const el = hostRef.current;
-    if (!el || !jumpTo) return;
+    if (!el) return;
 
-    const y = jumpTo.getFullYear();
-    const m = jumpTo.getMonth();
+    const target = jumpTo ?? base;
+    const y = target.getFullYear();
+    const m = target.getMonth();
 
     if (y < startYear) setStartYear(y - 6);
     if (y > endYear)   setEndYear(y + 6);
 
-    // scroll when the node exists
     const seek = () => {
-      const target = el.querySelector<HTMLElement>(`#ym-${y}-${String(m + 1).padStart(2, "0")}`);
-      if (target) target.scrollIntoView({ block: "start" });
+      const node = el.querySelector<HTMLElement>(`#ym-${y}-${String(m + 1).padStart(2, "0")}`);
+      if (node) node.scrollIntoView({ block: "start" });
       else setTimeout(seek, 40);
     };
     seek();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [jumpTo, startYear, endYear]);
 
   return (

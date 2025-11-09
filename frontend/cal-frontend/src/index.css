@@ -43,7 +43,11 @@ html, body {
   background: var(--paper);
   border: var(--ledger-side) solid var(--ink);
   box-sizing: border-box;
-  min-height: 100vh;
+
+  /* Lock the page height so only the inner calendar/year scroller moves */
+  height: 100vh;
+  min-height: 0;
+
   display: grid;
   grid-template-rows: auto auto 1fr; /* plaque, monthbar, calendar */
   position: relative;
@@ -257,10 +261,9 @@ html, body {
 }
 
 /* -------- FLOATING: MONTH/YEAR — column alignment fix --------
-   The key to fix the “Friday line” and any header/body misalignment:
    1) force fixed layout + collapsed borders
    2) draw *only left* vertical borders for both header and body
-   3) remove any wrapper right borders (even from sync tables) */
+   3) remove wrapper right borders (even from sync tables) */
 .v-paper > main.is-floating.view-month .fc-theme-standard .fc-scrollgrid,
 .v-paper > main.is-floating.view-year  .fc-theme-standard .fc-scrollgrid{
   border-top: var(--ledger-top) solid var(--ink) !important;
@@ -294,11 +297,15 @@ html, body {
   border-left: 0 !important;
 }
 
-/* remove phantom right/bottom edges from the last column/row */
+/* ⚠️ Keep header bottom line (fixes missing line under “FRI.”) */
 .v-paper > main.is-floating.view-month .fc .fc-col-header thead tr > th:last-child,
+.v-paper > main.is-floating.view-year  .fc .fc-col-header thead tr > th:last-child {
+  border-right: 0 !important; /* do NOT remove border-bottom here */
+}
+
+/* Body: remove phantom right & bottom edges only where appropriate */
 .v-paper > main.is-floating.view-month .fc .fc-daygrid-body table > tbody > tr > td:last-child,
 .v-paper > main.is-floating.view-month .fc .fc-daygrid-body table > tbody > tr:last-child > td,
-.v-paper > main.is-floating.view-year  .fc .fc-col-header thead tr > th:last-child,
 .v-paper > main.is-floating.view-year  .fc .fc-daygrid-body table > tbody > tr > td:last-child,
 .v-paper > main.is-floating.view-year  .fc .fc-daygrid-body table > tbody > tr:last-child > td {
   border-right: 0 !important;
@@ -322,14 +329,18 @@ html, body {
 .fc .fc-daygrid-day.is-hover { box-shadow: inset 0 0 0 2px var(--accent); }
 .fc .fc-daygrid-day-top.hover-armed { cursor: pointer; background: rgba(133, 41, 29, 0.06); }
 
+
+
 /* Week: hover header -> highlight whole column */
 .fc .fc-col-header-cell.is-hover {
-  background-image: linear-gradient(to bottom, rgba(85, 29, 22, 0.06), rgba(85, 29, 22, 0.06));
+  background-image: linear-gradient(to bottom, rgba(85, 29, 22, 0.603), rgba(85, 29, 22, 0.603));
 } 
 .fc .fc-timegrid-col.is-hover {
   box-shadow: inset 0 0 0 2px var(--accent);
   background-image: linear-gradient(to bottom, rgba(133, 41, 29, 0.06), rgba(133, 41, 29, 0.06));
 }
+
+
 
 /* ===================== YEAR VIEW ===================== */
 .yv-wrap {
@@ -406,3 +417,5 @@ html, body {
   font-weight: 700;
   box-shadow: inset 0 0 0 1px var(--accent);
 }
+
+
