@@ -1,16 +1,15 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
 /**
- * A lightweight, scrollable Year view that:
- *  - opens centered on the requested/current month
- *  - extends infinitely in both directions as you scroll
- *  - never hides the top banner (scroll happens INSIDE main)
+ * Scrollable infinite Year view.
+ * - opens centered on jumpTo/current month
+ * - extends as you scroll
+ * - month tiles are clickable to open Month view in the parent
  */
 type Props = {
-  /** Month to jump/center to (we'll ensure it's in range and scroll it into view). */
   jumpTo?: Date;
-  /** Report a reasonable "anchor" month so your header (month/year) updates. */
   onAnchorChange?: (d: Date) => void;
+  onPick?: (y: number, mZeroBased: number) => void; // click a month tile
 };
 
 function daysInMonth(y: number, m: number) {
@@ -27,14 +26,28 @@ function monthMatrix(y: number, m: number) {
   return cells;
 }
 
-function MonthTile({ y, m }: { y: number; m: number }) {
+function MonthTile({ y, m, onPick }: { y: number; m: number; onPick?: (y: number, m: number) => void }) {
   const today = new Date();
   const isTodayMonth = today.getFullYear() === y && today.getMonth() === m;
   const mm = useMemo(() => monthMatrix(y, m), [y, m]);
   const monthName = new Date(y, m, 1).toLocaleString("en-US", { month: "long" });
 
+  const handleClick = () => onPick?.(y, m);
+  const handleKey = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onPick?.(y, m); }
+  };
+
   return (
-    <div className="yv-month" id={`ym-${y}-${String(m + 1).padStart(2, "0")}`} data-ym={`${y}-${m}`}>
+    <div
+      className="yv-month"
+      id={`ym-${y}-${String(m + 1).padStart(2, "0")}`}
+      data-ym={`${y}-${m}`}
+      onClick={handleClick}
+      tabIndex={0}
+      onKeyDown={handleKey}
+      role="button"
+      aria-label={`Open ${monthName} ${y}`}
+    >
       <div className="yv-monthname">{monthName}</div>
       <div className="yv-grid">
         {/* DOW header */}
@@ -55,10 +68,9 @@ function MonthTile({ y, m }: { y: number; m: number }) {
   );
 }
 
-export default function YearView({ jumpTo, onAnchorChange }: Props) {
+export default function YearView({ jumpTo, onAnchorChange, onPick }: Props) {
   const hostRef = useRef<HTMLDivElement | null>(null);
 
-  // Start with a generous window both directions so you can immediately scroll up or down.
   const base = jumpTo ?? new Date();
   const baseYear = base.getFullYear();
   const [startYear, setStartYear] = useState<number>(baseYear - 20);
@@ -130,7 +142,7 @@ export default function YearView({ jumpTo, onAnchorChange }: Props) {
     return () => observer.disconnect();
   }, [years, onAnchorChange]);
 
-  // Jump to a month (used by the outer arrows and when switching into Year view)
+  // Jump to a month (used by outer arrows and when switching into Year view)
   useEffect(() => {
     const el = hostRef.current;
     if (!el) return;
@@ -144,7 +156,7 @@ export default function YearView({ jumpTo, onAnchorChange }: Props) {
 
     const seek = () => {
       const node = el.querySelector<HTMLElement>(`#ym-${y}-${String(m + 1).padStart(2, "0")}`);
-      if (node) node.scrollIntoView({ block: "start" });
+      if (node) node.scrollIntoView({ block: "nearest" }); // gentler than "start" (prevents slight downward nudge)
       else setTimeout(seek, 40);
     };
     seek();
@@ -152,13 +164,13 @@ export default function YearView({ jumpTo, onAnchorChange }: Props) {
   }, [jumpTo, startYear, endYear]);
 
   return (
-    <div ref={hostRef} className="yv-wrap" aria-label="Year view (read-only)">
+    <div ref={hostRef} className="yv-wrap" aria-label="Year view">
       {years.map((y) => (
         <section key={y} className="yv-yearsection" data-year={y}>
           <header className="yv-yearhdr">{y}</header>
           <div className="yv-yeargrid">
             {Array.from({ length: 12 }, (_, m) => (
-              <MonthTile key={`${y}-${m}`} y={y} m={m} />
+              <MonthTile key={`${y}-${m}`} y={y} m={m} onPick={onPick} />
             ))}
           </div>
         </section>
