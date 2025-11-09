@@ -330,8 +330,6 @@ html, body {
 .fc .fc-daygrid-day.is-hover { box-shadow: inset 0 0 0 2px var(--accent); }
 .fc .fc-daygrid-day-top.hover-armed { cursor: pointer; background: rgba(133, 41, 29, 0.06); }
 
-
-
 /* Week: hover header -> highlight whole column */
 .fc .fc-col-header-cell.is-hover {
   background-image: linear-gradient(to bottom, var(--accenthover), var(--accenthover));
@@ -341,20 +339,26 @@ html, body {
   background-image: linear-gradient(to bottom, rgba(133, 41, 29, 0.26), rgba(133, 41, 29, 0.26));
 }
 
-
-
 /* ===================== YEAR VIEW ===================== */
 .yv-wrap {
   height: 100%;
   overflow: auto;
-  padding: 8px 18px 18px 18px;
-  background: transparent;            /* matches the paper; top stays visible */
+
+  /* remove top padding to stop the slight vertical “push down” when switching */
+  padding: 0 18px 18px 18px;
+
+  background: transparent;
 }
+
+/* also remove the first section’s top margin to keep the top edge aligned */
+.yv-wrap .yv-yearsection:first-child { margin-top: 0; }
 
 .yv-yearsection {
   margin: 10px 6px 18px;
   border: var(--ledger-side) solid var(--ink);
-  background: var(--paper);           /* no bright white block */
+
+  /* darker surround so month tiles pop; uses the rail variable as requested */
+  background: var(--rail);
 }
 
 .yv-yearhdr {
@@ -363,7 +367,10 @@ html, body {
   letter-spacing: .02em;
   padding: 6px 10px;
   border-bottom: var(--ledger-top) solid var(--ink);
-  background: #f4eada;
+
+  /* header bar uses accent background + navface text color */
+  background: var(--accent);
+  color: var(--navface);
 }
 
 /* 3 columns like Apple’s year view; responsive down to 2/1 */
@@ -378,7 +385,7 @@ html, body {
 
 .yv-month {
   border: 2px solid var(--ink);
-  background: var(--paper);
+  background: var(--paper); /* stays lighter than the container for contrast */
 }
 
 .yv-monthname {
@@ -418,5 +425,3 @@ html, body {
   font-weight: 700;
   box-shadow: inset 0 0 0 1px var(--accent);
 }
-
-
