@@ -16,7 +16,7 @@ import type { EventOut as ApiEvent, EventIn } from "./api";
 import EventModal from "./EventModal";
 import NewEventModal from "./NewEventModal";
 
-import YearView from "./YearView"; // ⬅️ NEW
+import YearView from "./YearView";
 
 import "./index.css";
 import "./App.css";
@@ -26,11 +26,11 @@ type CalEvent = Omit<ApiEvent, "id"> & { id: string };
 const LS_VIEW  = "cal:view";
 const LS_DATE  = "cal:date";
 const LS_FRAME = "cal:frame-mode";
-const LS_YEAR  = "cal:year-mode"; // "1" when Year stub is active
+const LS_YEAR  = "cal:year-mode"; // "1" when Year view is active
 
 type FrameMode = "attached" | "floating";
 
-// Custom DOW labels to match artwork (TUES., THUR., etc.)
+// Custom DOW labels to match artwork
 const DOW_FMT = ["SUN.", "MON.", "TUES.", "WED.", "THUR.", "FRI.", "SAT."] as const;
 
 function headerLabel(date: Date, viewType: string) {
@@ -41,7 +41,6 @@ function headerLabel(date: Date, viewType: string) {
   return `${dow} ${mm}/${dd}`;
 }
 
-// SVG arrow
 function ArrowSVG({ dir }: { dir: "left" | "right" }) {
   const transform = dir === "left" ? "scale(-1,1) translate(-56,0)" : undefined;
   return (
@@ -54,7 +53,6 @@ function ArrowSVG({ dir }: { dir: "left" | "right" }) {
   );
 }
 
-// Placeholder mini calendar icon
 function MiniCalIcon() {
   return (
     <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden>
@@ -62,23 +60,16 @@ function MiniCalIcon() {
       <rect x="3" y="7" width="18" height="12" rx="2" stroke="currentColor" strokeWidth="2" fill="none" />
       <rect x="6" y="3" width="3" height="4" rx="1" fill="currentColor" />
       <rect x="15" y="3" width="3" height="4" rx="1" fill="currentColor" />
-      {/* grid */}
       <path d="M6 11H18M6 14H18M6 17H18M9 9V19M12 9V19M15 9V19" stroke="currentColor" strokeWidth="1" />
     </svg>
   );
 }
 
-// Toolbox/briefcase icon
 function ToolboxIcon() {
   return (
     <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden>
       <rect x="3" y="8" width="18" height="10" rx="2" />
-      <path
-        d="M8 8V6a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="2"
-      />
+      <path d="M8 8V6a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" fill="none" stroke="currentColor" strokeWidth="2" />
       <rect x="7" y="11" width="10" height="3" rx="1" fill="currentColor" />
     </svg>
   );
@@ -89,35 +80,29 @@ export default function App() {
   const [modalInit, setModalInit] = useState<ApiEvent | undefined | null>(null);
   const [showNew, setShowNew] = useState(false);
 
-  // Two separate menus (calendar vs toolbox)
   const [menuCalOpen, setMenuCalOpen] = useState(false);
   const [menuToolsOpen, setMenuToolsOpen] = useState(false);
 
   const calRef = useRef<FullCalendar | null>(null);
   const toolsRef = useRef<HTMLDivElement | null>(null);
 
-  // anchor date for big header
   const [anchor, setAnchor] = useState<Date>(new Date());
   const monthName = anchor.toLocaleString("en-US", { month: "long" }).toUpperCase();
   const year = anchor.getFullYear();
 
-  // current FC view type for styling
   const [viewType, setViewType] = useState<string>("timeGridWeek");
 
-  // TRUE = show our custom YearView instead of FC month
   const [yearMode, setYearMode] = useState<boolean>(() => {
     return typeof window !== "undefined" && localStorage.getItem(LS_YEAR) === "1";
   });
   const yearModeRef = useRef<boolean>(yearMode);
   useEffect(() => { yearModeRef.current = yearMode; }, [yearMode]);
 
-  // frame mode (attached vs floating)
   const [frameMode, setFrameMode] = useState<FrameMode>(() => {
     const saved = (typeof window !== "undefined" && localStorage.getItem(LS_FRAME)) as FrameMode | null;
     return saved === "floating" ? "floating" : "attached";
   });
 
-  // Request YearView to scroll to a specific month when arrows are used
   const [yearJump, setYearJump] = useState<Date | undefined>(undefined);
 
   const gotoDate = (iso: string) => calRef.current?.getApi().gotoDate(iso);
@@ -141,7 +126,6 @@ export default function App() {
     }
   };
 
-  // reload events for a range
   const reload = (start?: string, end?: string) =>
     listEvents(start, end)
       .then((api) => {
@@ -154,7 +138,6 @@ export default function App() {
         return [];
       });
 
-  // initial load + restore view/date/year mode
   useEffect(() => {
     reload().then((loaded) => {
       const api = calRef.current?.getApi();
@@ -167,7 +150,7 @@ export default function App() {
 
         if (localStorage.getItem(LS_YEAR) === "1") {
           setYearMode(true);
-          setViewType("year"); // tag for styling
+          setViewType("year");
         } else {
           setViewType(api?.view?.type || "timeGridWeek");
         }
@@ -178,7 +161,6 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // recompute sizes on resize
   useEffect(() => {
     const onResize = () => calRef.current?.getApi().updateSize();
     setTimeout(onResize, 0);
@@ -186,7 +168,6 @@ export default function App() {
     return () => window.removeEventListener("resize", onResize);
   }, []);
 
-  // close both menus when clicking outside
   useEffect(() => {
     const onDoc = (e: MouseEvent) => {
       if (!toolsRef.current?.contains(e.target as Node)) {
@@ -207,13 +188,12 @@ export default function App() {
 
   const openEdit = (evt: ApiEvent) => setModalInit(evt);
 
-  const handleSaved = (e: ApiEvent | undefined, _mode?: "create" | "update" | "delete") => {
+  const handleSaved = (e: ApiEvent | undefined) => {
     if (e) gotoDate(e.start);
     reload();
     setModalInit(null);
   };
 
-  // Export ICS for visible range (kept for future use)
   const exportICS = () => {
     const api = calRef.current?.getApi();
     if (!api) return;
@@ -223,7 +203,6 @@ export default function App() {
     window.open(url, "_blank");
   };
 
-  // drag/drop + resize handlers
   const buildPayloadFromEvent = (fc: any): EventIn => {
     const ext = fc.extendedProps || {};
     const startIso = fc.start ? fc.start.toISOString() : new Date().toISOString();
@@ -241,24 +220,17 @@ export default function App() {
   async function applyUpdateOrSuggest(fcEvent: any, revert: () => void) {
     const id = Number(fcEvent.id);
     const payload = buildPayloadFromEvent(fcEvent);
-
     try {
       await updateEvent(id, payload);
       reload();
-    } catch (_err: any) {
+    } catch {
       revert();
     }
   }
 
-  const onEventDrop = async (arg: EventDropArg) => {
-    await applyUpdateOrSuggest(arg.event, arg.revert);
-  };
+  const onEventDrop   = async (arg: EventDropArg)       => { await applyUpdateOrSuggest(arg.event, arg.revert); };
+  const onEventResize = async (arg: EventResizeDoneArg)  => { await applyUpdateOrSuggest(arg.event, arg.revert); };
 
-  const onEventResize = async (arg: EventResizeDoneArg) => {
-    await applyUpdateOrSuggest(arg.event, arg.revert);
-  };
-
-  // compact event renderer
   const renderEvent = (arg: EventContentArg) => {
     const loc = arg.event.extendedProps?.location as string | undefined;
     const root = document.createElement("div");
@@ -278,18 +250,12 @@ export default function App() {
     return { domNodes: [root] };
   };
 
-  // classes to control floating/attached and view-specific borders
   const frameClass = frameMode === "floating" ? "is-floating" : "is-attached";
   const viewClass =
     yearMode
       ? "view-year"
-      : (viewType === "dayGridMonth"
-          ? "view-month"
-          : viewType === "timeGridDay"
-            ? "view-day"
-            : "view-week");
+      : (viewType === "dayGridMonth" ? "view-month" : viewType === "timeGridDay" ? "view-day" : "view-week");
 
-  // -------- Mini calendar actions --------
   const goToday = () => {
     if (yearModeRef.current) {
       const now = new Date();
@@ -318,34 +284,22 @@ export default function App() {
   };
 
   const setYear = () => {
-    // Real Year view now
     setYearMode(true);
     localStorage.setItem(LS_YEAR, "1");
     setViewType("year");
     setMenuCalOpen(false);
   };
 
-  // ---------- Helpers for hover/click behaviors ----------
   function armMonthTopHover(arg: any) {
     if (arg.view?.type !== "dayGridMonth" || yearModeRef.current) return;
     const cellEl: HTMLElement = arg.el;
     const top = cellEl.querySelector<HTMLElement>(".fc-daygrid-day-top");
     if (!top) return;
-
     const date = arg.date;
 
-    const enter = () => {
-      cellEl.classList.add("is-hover");
-      top.classList.add("hover-armed");
-    };
-    const leave = () => {
-      cellEl.classList.remove("is-hover");
-      top.classList.remove("hover-armed");
-    };
-    const click = () => {
-      // open Day view for that date
-      calRef.current?.getApi().changeView("timeGridDay", date);
-    };
+    const enter = () => { cellEl.classList.add("is-hover"); top.classList.add("hover-armed"); };
+    const leave = () => { cellEl.classList.remove("is-hover"); top.classList.remove("hover-armed"); };
+    const click = () => { calRef.current?.getApi().changeView("timeGridDay", date); };
 
     top.addEventListener("mouseenter", enter);
     top.addEventListener("mouseleave", leave);
@@ -354,7 +308,6 @@ export default function App() {
 
   function armWeekHeaderHover(arg: any) {
     if (arg.view?.type !== "timeGridWeek") return;
-
     const th: HTMLElement = arg.el;
     const dateStr = arg.date?.toISOString?.().slice(0, 10);
     if (!dateStr) return;
@@ -362,17 +315,9 @@ export default function App() {
     const columns = () =>
       Array.from(document.querySelectorAll<HTMLElement>(`.fc-timegrid-col[data-date="${dateStr}"]`));
 
-    const enter = () => {
-      th.classList.add("is-hover");
-      columns().forEach((c) => c.classList.add("is-hover"));
-    };
-    const leave = () => {
-      th.classList.remove("is-hover");
-      columns().forEach((c) => c.classList.remove("is-hover"));
-    };
-    const click = () => {
-      calRef.current?.getApi().changeView("timeGridDay", arg.date);
-    };
+    const enter = () => { th.classList.add("is-hover"); columns().forEach((c) => c.classList.add("is-hover")); };
+    const leave = () => { th.classList.remove("is-hover"); columns().forEach((c) => c.classList.remove("is-hover")); };
+    const click = () => { calRef.current?.getApi().changeView("timeGridDay", arg.date); };
 
     th.addEventListener("mouseenter", enter);
     th.addEventListener("mouseleave", leave);
@@ -381,28 +326,13 @@ export default function App() {
 
   return (
     <>
-      {/* OUTER PAPER */}
       <div className="v-paper">
-        {/* Left/Right arrows */}
-        <button className="v-nav v-nav-left" onClick={gotoPrev} aria-label="Previous period">
-          <ArrowSVG dir="left" />
-        </button>
-        <button className="v-nav v-nav-right" onClick={gotoNext} aria-label="Next period">
-          <ArrowSVG dir="right" />
-        </button>
+        <button className="v-nav v-nav-left"  onClick={gotoPrev} aria-label="Previous period"><ArrowSVG dir="left" /></button>
+        <button className="v-nav v-nav-right" onClick={gotoNext} aria-label="Next period"><ArrowSVG dir="right" /></button>
 
-        {/* Tools cluster (top-left): Mini calendar + Toolbox (stacked) */}
         <div ref={toolsRef} className="v-tools">
           <div className="v-toolwrap">
-            <button
-              type="button"
-              className="v-toolbtn"
-              aria-label="Calendar"
-              onClick={() => {
-                setMenuCalOpen((v) => !v);
-                setMenuToolsOpen(false);
-              }}
-            >
+            <button type="button" className="v-toolbtn" aria-label="Calendar" onClick={() => { setMenuCalOpen((v) => !v); setMenuToolsOpen(false); }}>
               <MiniCalIcon />
             </button>
             {menuCalOpen && (
@@ -416,74 +346,34 @@ export default function App() {
           </div>
 
           <div className="v-toolwrap">
-            <button
-              type="button"
-              className="v-toolbtn"
-              aria-label="Toolbox"
-              onClick={() => {
-                setMenuToolsOpen((v) => !v);
-                setMenuCalOpen(false);
-              }}
-            >
+            <button type="button" className="v-toolbtn" aria-label="Toolbox" onClick={() => { setMenuToolsOpen((v) => !v); setMenuCalOpen(false); }}>
               <ToolboxIcon />
             </button>
             {menuToolsOpen && (
               <div className="v-menu v-menu-tools">
-                <button
-                  className="v-menu-item"
-                  onClick={() => {
-                    setMenuToolsOpen(false);
-                    setShowNew(true);
-                  }}
-                >
-                  + New
-                </button>
-                <button
-                  className="v-menu-item"
-                  onClick={() => {
-                    setFrameMode("attached");
-                    localStorage.setItem(LS_FRAME, "attached");
-                    setMenuToolsOpen(false);
-                  }}
-                >
-                  Attached
-                </button>
-                <button
-                  className="v-menu-item"
-                  onClick={() => {
-                    setFrameMode("floating");
-                    localStorage.setItem(LS_FRAME, "floating");
-                    setMenuToolsOpen(false);
-                  }}
-                >
-                  Floating
-                </button>
+                <button className="v-menu-item" onClick={() => { setMenuToolsOpen(false); setShowNew(true); }}>+ New</button>
+                <button className="v-menu-item" onClick={() => { setFrameMode("attached"); localStorage.setItem(LS_FRAME, "attached"); setMenuToolsOpen(false); }}>Attached</button>
+                <button className="v-menu-item" onClick={() => { setFrameMode("floating"); localStorage.setItem(LS_FRAME, "floating"); setMenuToolsOpen(false); }}>Floating</button>
               </div>
             )}
           </div>
         </div>
 
-        {/* Plaque with “Cal” + roses */}
         <div className="v-plaque">
           <img aria-hidden src="/roses-divider2.png" className="v-rose v-rose-left" />
           <div className="v-cal-logo">Cal</div>
           <img aria-hidden src="/roses-divider.png" className="v-rose v-rose-right" />
         </div>
 
-        {/* Month title row (compact when not in Month) */}
-        <div className={`v-monthbar ${(!yearMode && viewType === "dayGridMonth") ? "" : "is-compact"}`}>
+        <div className={`v-monthbar ${yearMode ? "is-compact" : (viewType === "dayGridMonth" ? "" : "is-compact")}`}>
           <div className="v-year">{year}</div>
           <div className="v-month">{monthName}</div>
           <div className="v-year">{year}</div>
         </div>
 
-        {/* Calendar */}
         <main className={`relative flex-1 min-h-0 px-0 pb-0 ${frameClass} ${viewClass}`}>
           {yearMode ? (
-            <YearView
-              jumpTo={yearJump}
-              onAnchorChange={(d) => setAnchor(d)}
-            />
+            <YearView jumpTo={yearJump} onAnchorChange={(d) => setAnchor(d)} />
           ) : (
             <FullCalendar
               ref={calRef}
@@ -519,19 +409,15 @@ export default function App() {
                 if (e) openEdit({ ...e, id: +e.id });
               }}
               datesSet={(arg) => {
-                // persist view/date
                 localStorage.setItem(LS_VIEW, arg.view.type);
                 const current = calRef.current?.getApi().getDate();
                 if (current) {
                   localStorage.setItem(LS_DATE, current.toISOString());
                   setAnchor(current);
                 }
-                // keep events in range
                 reload(arg.startStr, arg.endStr);
                 setViewType(arg.view.type);
               }}
-
-              /* ✨ NEW: behaviors */
               dayCellDidMount={armMonthTopHover}
               dayHeaderDidMount={armWeekHeaderHover}
             />
@@ -540,14 +426,9 @@ export default function App() {
       </div>
 
       {modalInit !== null && (
-        <EventModal
-          initial={modalInit ?? undefined}
-          onClose={() => setModalInit(null)}
-          onSaved={handleSaved}
-        />
+        <EventModal initial={modalInit ?? undefined} onClose={() => setModalInit(null)} onSaved={handleSaved} />
       )}
 
-      {/* New → parse (text/image) → EventModal */}
       <NewEventModal
         open={showNew}
         onClose={() => setShowNew(false)}
@@ -560,7 +441,7 @@ export default function App() {
             title: p.title ?? "",
             start,
             end,
-            // @ts-ignore extras for EventModal helper features
+            // @ts-ignore helper hints
             thumb: p.thumb,
             // @ts-ignore
             repeatDays: p.repeatDays,

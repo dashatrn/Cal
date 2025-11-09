@@ -1,5 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
+/**
+ * A lightweight, scrollable Year view that:
+ *  - extends infinitely in both directions as you scroll
+ *  - never hides the top banner (scroll happens INSIDE main)
+ *  - uses the same “paper” palette (no stark white)
+ *  - reports an anchor date so the big header stays in sync
+ */
 type Props = {
   /** Month to jump/center to (we'll ensure it's in range and scroll it into view). */
   jumpTo?: Date;
@@ -7,12 +14,6 @@ type Props = {
   onAnchorChange?: (d: Date) => void;
 };
 
-function firstOfMonth(d: Date) {
-  return new Date(d.getFullYear(), d.getMonth(), 1);
-}
-function addMonths(d: Date, n: number) {
-  return new Date(d.getFullYear(), d.getMonth() + n, 1);
-}
 function daysInMonth(y: number, m: number) {
   return new Date(y, m + 1, 0).getDate();
 }
@@ -31,7 +32,6 @@ function MonthTile({ y, m }: { y: number; m: number }) {
   const today = new Date();
   const isTodayMonth = today.getFullYear() === y && today.getMonth() === m;
   const mm = useMemo(() => monthMatrix(y, m), [y, m]);
-
   const monthName = new Date(y, m, 1).toLocaleString("en-US", { month: "long" });
 
   return (
@@ -44,16 +44,9 @@ function MonthTile({ y, m }: { y: number; m: number }) {
         ))}
         {/* days */}
         {mm.map((v, i) => {
-          const isToday =
-            isTodayMonth &&
-            typeof v === "number" &&
-            v === today.getDate();
+          const isToday = isTodayMonth && typeof v === "number" && v === today.getDate();
           return (
-            <div
-              key={i}
-              className={`yv-cell${isToday ? " is-today" : ""}`}
-              aria-hidden
-            >
+            <div key={i} className={`yv-cell${isToday ? " is-today" : ""}`} aria-hidden>
               {v || ""}
             </div>
           );
@@ -66,57 +59,66 @@ function MonthTile({ y, m }: { y: number; m: number }) {
 export default function YearView({ jumpTo, onAnchorChange }: Props) {
   const hostRef = useRef<HTMLDivElement | null>(null);
 
-  // Keep a sliding window of years (e.g., [anchor-4 .. anchor+4])
-  const [startYear, setStartYear] = useState<number>(() => (jumpTo ? jumpTo.getFullYear() : new Date().getFullYear()) - 4);
-  const [endYear, setEndYear]     = useState<number>(() => (jumpTo ? jumpTo.getFullYear() : new Date().getFullYear()) + 4);
+  // Start with a generous window and extend as needed.
+  const base = jumpTo ?? new Date();
+  const [startYear, setStartYear] = useState<number>(base.getFullYear() - 10);
+  const [endYear, setEndYear]     = useState<number>(base.getFullYear() + 10);
 
-  // Create list of years and each year's 12 months
   const years = useMemo(() => {
     const ys: number[] = [];
     for (let y = startYear; y <= endYear; y++) ys.push(y);
     return ys;
   }, [startYear, endYear]);
 
-  // Infinite extend on scroll
+  // Throttled scroll extender — avoids jank while keeping “infinite” feel.
   useEffect(() => {
-    const el = hostRef.current!;
+    const el = hostRef.current;
     if (!el) return;
 
+    let raf = 0;
+    const PAD = 800; // px
+
     const onScroll = () => {
-      const pad = 600; // px
-      if (el.scrollTop < pad) {
-        // extend upward by 3 years
-        const before = el.scrollHeight;
-        setStartYear((y) => y - 3);
-        // after DOM paints, keep the viewport position stable
-        requestAnimationFrame(() => {
-          const after = el.scrollHeight;
-          el.scrollTop += (after - before);
-        });
-      } else if (el.scrollTop + el.clientHeight > el.scrollHeight - pad) {
-        // extend downward by 3 years
-        setEndYear((y) => y + 3);
-      }
+      if (raf) return;
+      raf = requestAnimationFrame(() => {
+        raf = 0;
+        const nearTop = el.scrollTop < PAD;
+        const nearBottom = el.scrollTop + el.clientHeight > el.scrollHeight - PAD;
+
+        if (nearTop) {
+          const before = el.scrollHeight;
+          setStartYear((y) => y - 5);
+          // preserve viewport after DOM grows above
+          requestAnimationFrame(() => {
+            const after = el.scrollHeight;
+            el.scrollTop += (after - before);
+          });
+        } else if (nearBottom) {
+          setEndYear((y) => y + 5);
+        }
+      });
     };
 
     el.addEventListener("scroll", onScroll);
-    return () => el.removeEventListener("scroll", onScroll);
+    return () => {
+      el.removeEventListener("scroll", onScroll);
+      if (raf) cancelAnimationFrame(raf);
+    };
   }, []);
 
-  // Observe which year is near the top to update the "anchor" for your header
+  // Observe which year is near the top to update the “anchor”
   useEffect(() => {
     if (!hostRef.current || !onAnchorChange) return;
     const el = hostRef.current;
+
     const observer = new IntersectionObserver(
       (entries) => {
-        // pick the entry nearest to the top that is intersecting
         const vis = entries
           .filter((e) => e.isIntersecting)
           .sort((a, b) => Math.abs(a.boundingClientRect.top) - Math.abs(b.boundingClientRect.top));
         const top = vis[0];
         if (top) {
           const y = parseInt((top.target as HTMLElement).dataset.year!, 10);
-          // Use January to show a consistent month name in your banner
           onAnchorChange(new Date(y, 0, 1));
         }
       },
@@ -128,28 +130,24 @@ export default function YearView({ jumpTo, onAnchorChange }: Props) {
     return () => observer.disconnect();
   }, [years, onAnchorChange]);
 
-  // Jump to a specific month if requested (arrows in parent)
+  // Jump to a month (used by the outer arrows)
   useEffect(() => {
-    if (!jumpTo || !hostRef.current) return;
+    const el = hostRef.current;
+    if (!el || !jumpTo) return;
 
     const y = jumpTo.getFullYear();
     const m = jumpTo.getMonth();
-    // Ensure the year is present
-    if (y < startYear) setStartYear(y - 2);
-    if (y > endYear)   setEndYear(y + 2);
 
-    requestAnimationFrame(() => {
-      const target = hostRef.current!.querySelector<HTMLElement>(`#ym-${y}-${String(m + 1).padStart(2, "0")}`);
-      if (target) {
-        target.scrollIntoView({ block: "start" });
-      } else {
-        // if not yet in DOM due to range extension, try shortly after
-        setTimeout(() => {
-          const again = hostRef.current!.querySelector<HTMLElement>(`#ym-${y}-${String(m + 1).padStart(2, "0")}`);
-          again?.scrollIntoView({ block: "start" });
-        }, 60);
-      }
-    });
+    if (y < startYear) setStartYear(y - 6);
+    if (y > endYear)   setEndYear(y + 6);
+
+    // scroll when the node exists
+    const seek = () => {
+      const target = el.querySelector<HTMLElement>(`#ym-${y}-${String(m + 1).padStart(2, "0")}`);
+      if (target) target.scrollIntoView({ block: "start" });
+      else setTimeout(seek, 40);
+    };
+    seek();
   }, [jumpTo, startYear, endYear]);
 
   return (
