@@ -16,29 +16,64 @@ export const api = axios.create({
 export interface EventIn {
   title: string;
   start: string;
-  end:   string;
+  end: string;
   description?: string | null;
   location?: string | null;
 }
-export interface EventOut extends EventIn { id: number }
 
-export const listEvents  = (start?: string, end?: string) =>
-  api.get<EventOut[]>("/events", { params: (start && end) ? { start, end } : undefined })
-     .then(r => r.data);
+export interface EventOut extends EventIn {
+  id: number;
 
-export const createEvent = (e: EventIn)             =>
-  api.post<EventOut> ("/events",        e).then(r => r.data);
+  // Present only for recurring occurrences
+  series_id?: number | null;
+  original_start?: string | null;
+  is_exception?: boolean;
+}
+
+export const listEvents = (start?: string, end?: string) =>
+  api
+    .get<EventOut[]>("/events", {
+      params: start && end ? { start, end } : undefined,
+    })
+    .then((r) => r.data);
+
+export const createEvent = (e: EventIn) =>
+  api.post<EventOut>("/events", e).then((r) => r.data);
 
 export const updateEvent = (id: number, e: EventIn) =>
-  api.put <EventOut> (`/events/${id}`,  e).then(r => r.data);
+  api.put<EventOut>(`/events/${id}`, e).then((r) => r.data);
 
-export const deleteEvent = (id: number) =>
-  api.delete(`/events/${id}`);
+export const deleteEvent = (id: number) => api.delete(`/events/${id}`);
+
+// ── Recurrence (server-side series creation; occurrences are materialized as events) ──
+
+export interface SeriesIn {
+  title: string;
+  start: string;
+  end: string;
+  description?: string | null;
+  location?: string | null;
+
+  tz: string;
+
+  // 0=Sun .. 6=Sat
+  repeatDays: number[];
+  repeatEveryWeeks: number;
+  repeatUntil: string; // YYYY-MM-DD (local, interpreted using tz)
+}
+
+export interface SeriesCreateOut {
+  seriesId: number;
+  events: EventOut[];
+}
+
+export const createSeries = (s: SeriesIn) =>
+  api.post<SeriesCreateOut>("/series", s).then((r) => r.data);
 
 export type ParsedFields = Partial<EventIn> & {
   thumb?: string;
   repeatDays?: number[];
-  repeatUntil?: string;      // YYYY-MM-DD (local)
+  repeatUntil?: string; // YYYY-MM-DD (local)
   repeatEveryWeeks?: number; // e.g. 2 for biweekly
 };
 
@@ -51,11 +86,14 @@ export async function uploadImageForParse(file: File): Promise<ParsedFields> {
 }
 
 export const parsePrompt = (prompt: string, tz?: string) =>
-  api.post<ParsedFields>("/parse", {
-    prompt,
-    tz: tz || Intl.DateTimeFormat().resolvedOptions().timeZone,
-  }).then(r => r.data);
+  api
+    .post<ParsedFields>("/parse", {
+      prompt,
+      tz: tz || Intl.DateTimeFormat().resolvedOptions().timeZone,
+    })
+    .then((r) => r.data);
 
 export const suggestNext = (startIso: string, endIso: string) =>
-  api.get<{ start: string; end: string }>("/suggest", { params: { start: startIso, end: endIso } })
-     .then(r => r.data);
+  api
+    .get<{ start: string; end: string }>("/suggest", { params: { start: startIso, end: endIso } })
+    .then((r) => r.data);

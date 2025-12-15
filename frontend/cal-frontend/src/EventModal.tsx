@@ -1,258 +1,291 @@
-import { useEffect, useState } from "react";
-import type { AxiosError } from "axios";
-import type { EventOut, EventIn } from "./api";
-import { createEvent, updateEvent, deleteEvent, suggestNext } from "./api";
-import { isoToLocalInput, localInputToISO, nowLocalInput } from "./datetime";
-import { BASE_URL } from "./api";
+import React, { useEffect, useMemo, useState } from "react";
+import { createEvent, createSeries, updateEvent, deleteEvent, suggestNext } from "./api";
 
-interface Props {
-  initial?: EventOut | null;  // optional seed values (may include thumb/repeat hints)
-  onClose(): void;
-  onSaved(e: EventOut, mode: "create" | "update" | "delete"): void;
+type Mode = "create" | "edit";
+
+type Props = {
+  isOpen: boolean;
+  initial?: any;
+  parsed?: any;
+  onClose: () => void;
+  onSaved: (evt?: any, mode?: Mode) => void;
+};
+
+function toLocalInputValue(iso: string) {
+  const d = new Date(iso);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  const yyyy = d.getFullYear();
+  const mm = pad(d.getMonth() + 1);
+  const dd = pad(d.getDate());
+  const hh = pad(d.getHours());
+  const mi = pad(d.getMinutes());
+  return `${yyyy}-${mm}-${dd}T${hh}:${mi}`;
 }
 
-const WEEK = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"] as const;
+function asUTC(yyyyMMddThhmm: string) {
+  const d = new Date(yyyyMMddThhmm);
+  return d.toISOString();
+}
 
-export default function EventModal({ initial, onClose, onSaved }: Props) {
-  // yyyy-mm-ddThh:mm in the user's local time
-  const isoNowLocal = nowLocalInput();
+function weekdayFromISO(iso: string) {
+  const d = new Date(iso);
+  // Convert JS getDay() (0=Sun..6=Sat) to our same convention
+  return d.getDay();
+}
 
-  const [form, setForm] = useState<EventIn>({
-    title: initial?.title ?? "",
-    start: initial?.start ? isoToLocalInput(initial.start) : isoNowLocal,
-    end:   initial?.end   ? isoToLocalInput(initial.end)   : isoNowLocal,
-  });
+export default function EventModal({ isOpen, initial, parsed, onClose, onSaved }: Props) {
+  const isEdit = !!initial?.id;
 
-  const [conflict, setConflict] = useState<null | { title: string; start: string; end: string }>(null);
-  const [suggested, setSuggested] = useState<null | { start: string; end: string }>(null);
+  const [title, setTitle] = useState("");
+  const [start, setStart] = useState("");
+  const [end, setEnd] = useState("");
+  const [description, setDescription] = useState("");
+  const [location, setLocation] = useState("");
 
-  const isEdit = typeof initial?.id === "number" && initial.id !== 0;
-
-  const change =
-    (k: keyof EventIn) =>
-    (e: React.ChangeEvent<HTMLInputElement>) =>
-      setForm({ ...form, [k]: e.target.value });
-
-  // Optional repeat hints passed from NewEventModal
-  const providedDays   = (initial as any)?.repeatDays as number[] | undefined;
-  const providedUntil  = (initial as any)?.repeatUntil as string | undefined;
-  const providedEvery  = (initial as any)?.repeatEveryWeeks as number | undefined;
-
-  const [repeatOpen, setRepeatOpen] = useState(false);
-  const [repeatDays, setRepeatDays] = useState<Record<number, boolean>>({0:false,1:false,2:false,3:false,4:false,5:false,6:false});
-  const [repeatUntil, setRepeatUntil] = useState<string>(""); // yyyy-mm-dd
+  const [repeatUntil, setRepeatUntil] = useState<string>("");
+  const [repeatDays, setRepeatDays] = useState<Record<number, boolean>>({});
+  const providedDays: number[] | undefined = parsed?.repeatDays;
+  const providedUntil: string | undefined = parsed?.repeatUntil;
+  const providedEvery: number | undefined = parsed?.repeatEveryWeeks;
 
   useEffect(() => {
-    if ((providedDays && providedDays.length) || providedUntil) setRepeatOpen(true);
-    if (providedDays?.length) {
-      setRepeatDays(prev => {
-        const m = { ...prev };
-        providedDays.forEach(d => { if (d >= 0 && d <= 6) m[d] = true; });
-        return m;
-      });
+    if (!isOpen) return;
+
+    const src = initial || parsed || {};
+    setTitle(src.title || "");
+    setStart(src.start ? toLocalInputValue(src.start) : "");
+    setEnd(src.end ? toLocalInputValue(src.end) : "");
+    setDescription(src.description || "");
+    setLocation(src.location || "");
+
+    // seed recurrence from parsed hints
+    if (!isEdit && providedUntil) setRepeatUntil(providedUntil);
+    if (!isEdit && providedDays?.length) {
+      const map: Record<number, boolean> = {};
+      for (const d of providedDays) map[d] = true;
+      setRepeatDays(map);
+    } else if (!isEdit && src.start) {
+      const wd = weekdayFromISO(src.start);
+      setRepeatDays({ [wd]: true });
     }
-    if (providedUntil) setRepeatUntil(providedUntil);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [isOpen]);
 
-  const toggleDay = (d: number) => setRepeatDays({ ...repeatDays, [d]: !repeatDays[d] });
-  const anyRepeat = Object.values(repeatDays).some(Boolean) && !!repeatUntil;
+  const anyRepeat = useMemo(() => {
+    const hasDay = Object.values(repeatDays).some(Boolean);
+    return !!repeatUntil && hasDay;
+  }, [repeatUntil, repeatDays]);
 
-  const asUTC = (s: string) => localInputToISO(s);
+  function toggleDay(d: number) {
+    setRepeatDays((prev) => ({ ...prev, [d]: !prev[d] }));
+  }
 
-  // Keep same local HH:MM but move to a different date (ymd)
-  const sameTimeOnDate = (baseStartLocal: string, baseEndLocal: string, ymd: string) => {
-    const startTime = baseStartLocal.split("T")[1]; // hh:mm
-    const endTime   = baseEndLocal.split("T")[1];
-    const startISO  = localInputToISO(`${ymd}T${startTime}`);
-    const endISO    = localInputToISO(`${ymd}T${endTime}`);
-    return { startISO, endISO };
-  };
+  function enumerateRepeats() {
+    // Keeps the old client-side logic around (not used anymore for creation),
+    // but can be useful for debugging or later UI work.
+    const days = Object.entries(repeatDays)
+      .filter(([_, v]) => v)
+      .map(([k]) => Number(k));
+    if (!repeatUntil || days.length === 0 || !start || !end) return [];
 
-  // Expand repeats into concrete occurrences
-  const enumerateRepeats = (): EventIn[] => {
-    const start0UTC = new Date(asUTC(form.start));
-    const until     = repeatUntil ? new Date(`${repeatUntil}T23:59:59`) : null;
-    const out: EventIn[] = [];
-    if (!until) return out;
+    const startIso = asUTC(start);
+    const endIso = asUTC(end);
 
-    const firstLocalNoon = new Date(
-      start0UTC.getUTCFullYear(), start0UTC.getUTCMonth(), start0UTC.getUTCDate(), 12, 0, 0
-    );
+    const startDate = new Date(startIso);
+    const untilDate = new Date(`${repeatUntil}T23:59:59`);
 
-    const d = new Date(start0UTC);
-    for (;;) {
-      const localNoon = new Date(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), 12, 0, 0);
-      if (localNoon > until) break;
+    const durMs = new Date(endIso).getTime() - new Date(startIso).getTime();
+    const out: any[] = [];
 
-      const dow = localNoon.getDay();
-      if (repeatDays[dow]) {
-        if (providedEvery && providedEvery > 1) {
-          const weeksSinceStart = Math.floor((localNoon.getTime() - firstLocalNoon.getTime()) / (7 * 24 * 3600 * 1000));
-          if (weeksSinceStart % providedEvery !== 0) { d.setUTCDate(d.getUTCDate() + 1); continue; }
-        }
-        const y = localNoon.getFullYear();
-        const m = String(localNoon.getMonth() + 1).padStart(2, "0");
-        const day = String(localNoon.getDate()).padStart(2, "0");
-        const ymd = `${y}-${m}-${day}`;
+    // crude weekly stepping
+    let cursor = new Date(startDate);
+    while (cursor <= untilDate) {
+      const dow = cursor.getDay(); // 0..6
+      if (days.includes(dow)) {
+        const occStart = new Date(cursor);
+        // force same time as original start
+        const src = new Date(startIso);
+        occStart.setHours(src.getHours(), src.getMinutes(), 0, 0);
+        const occEnd = new Date(occStart.getTime() + durMs);
 
-        const { startISO, endISO } = sameTimeOnDate(form.start, form.end, ymd);
-        out.push({ title: form.title, start: startISO, end: endISO });
+        out.push({
+          title,
+          start: occStart.toISOString(),
+          end: occEnd.toISOString(),
+          description,
+          location,
+        });
       }
-      d.setUTCDate(d.getUTCDate() + 1);
+      cursor.setDate(cursor.getDate() + 1);
     }
     return out;
-  };
+  }
 
-  const applySuggestion = (s: { start: string; end: string }) => {
-    setForm({ ...form, start: isoToLocalInput(s.start), end: isoToLocalInput(s.end) });
-    setConflict(null);
-    setSuggested(null);
+  const handleSuggest = async () => {
+    try {
+      const s = asUTC(start);
+      const e = asUTC(end);
+      const r = await suggestNext(s, e);
+      setStart(toLocalInputValue(r.start));
+      setEnd(toLocalInputValue(r.end));
+    } catch (err) {
+      alert("No free slot found.");
+    }
   };
 
   const handleSave = async () => {
-    const payload: EventIn = { ...form, start: asUTC(form.start), end: asUTC(form.end) };
-
     try {
+      const payload = {
+        title,
+        start: asUTC(start),
+        end: asUTC(end),
+        description: description || null,
+        location: location || null,
+      };
+
       if (!isEdit && anyRepeat) {
-        const batch = enumerateRepeats();
-        if (batch.length === 0) { alert("No matching days between start and until."); return; }
-        for (const ev of batch) {
-          try {
-            const saved = await createEvent(ev);
-            onSaved(saved, "create");
-          } catch (err: any) {
-            if ((err as AxiosError)?.response?.status === 409) {
-              const data: any = (err as AxiosError).response?.data;
-              setConflict(data?.detail?.conflicts?.[0] ?? null);
-              try { setSuggested(await suggestNext(ev.start, ev.end)); } catch {}
-              return;
-            } else {
-              console.error(err);
-              alert("Couldn’t save one of the repeats. See console.");
-              return;
-            }
-          }
+        const days = Object.entries(repeatDays)
+          .filter(([_, v]) => v)
+          .map(([k]) => Number(k));
+
+        if (days.length === 0 || !repeatUntil) {
+          alert("No matching days between start and until.");
+          return;
         }
+
+        const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+        const every = (providedEvery && providedEvery > 0) ? providedEvery : 1;
+
+        const created = await createSeries({
+          title: payload.title,
+          start: payload.start,
+          end: payload.end,
+          description: payload.description ?? null,
+          location: payload.location ?? null,
+          repeatDays: days,
+          repeatEveryWeeks: every,
+          repeatUntil,
+          tz,
+        });
+
+        // Trigger a reload + jump once (App ignores the mode arg)
+        onSaved(created.events?.[0], "create");
         onClose();
         return;
       }
 
-      const saved = isEdit
-        ? await updateEvent((initial as EventOut).id, payload)
-        : await createEvent(payload);
+      if (isEdit) {
+        const saved = await updateEvent(initial.id, payload);
+        onSaved(saved, "edit");
+      } else {
+        const saved = await createEvent(payload);
+        onSaved(saved, "create");
+      }
 
-      setConflict(null);
-      setSuggested(null);
-      onSaved(saved, isEdit ? "update" : "create");
       onClose();
     } catch (err: any) {
-      if ((err as AxiosError)?.response?.status === 409) {
-        const data: any = (err as AxiosError).response?.data;
-        setConflict(data?.detail?.conflicts?.[0] ?? null);
-        try { setSuggested(await suggestNext(payload.start, payload.end)); } catch {}
+      if (err?.response?.status === 409) {
+        alert("That time overlaps another event.");
       } else {
-        console.error(err);
-        alert("Couldn’t save. See console for details.");
+        alert("Failed to save event.");
       }
     }
   };
 
   const handleDelete = async () => {
     if (!isEdit) return;
-    await deleteEvent(initial!.id);
-    onSaved(initial!, "delete");
-    onClose();
+    if (!confirm("Delete this event?")) return;
+
+    try {
+      await deleteEvent(initial.id);
+      onSaved(undefined, "edit");
+      onClose();
+    } catch (err) {
+      alert("Failed to delete.");
+    }
   };
 
+  if (!isOpen) return null;
+
   return (
-    <div className="fixed inset-0 grid place-items-center bg-black/40 z-20">
-      <div className="bg-white rounded shadow p-6 w-96 space-y-4">
-        {conflict && (
-          <div className="bg-red-100 text-red-800 p-2 rounded text-sm">
-            <p className="font-semibold">⛔ Time conflict</p>
-            <p>{conflict.title}</p>
-            <p>
-              {new Date(conflict.start).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })} – {new Date(conflict.end).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-            </p>
+    <div className="modal-backdrop">
+      <div className="modal">
+        <h2 className="modal-title">{isEdit ? "Edit Event" : "New Event"}</h2>
 
-            {suggested && (
-              <div className="mt-2 flex items-center gap-2">
-                <span className="text-sm">
-                  Next free:{" "}
-                  {new Date(suggested.start).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
-                  {" – "}
-                  {new Date(suggested.end).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-                </span>
-                <button type="button" onClick={() => applySuggestion(suggested)} className="ml-auto px-2 py-0.5 rounded bg-black text-white">
-                  Use it
-                </button>
-              </div>
-            )}
-          </div>
-        )}
-
-        <div className="flex items-center space-x-3">
-          {initial && (initial as any).thumb && (() => {
-            const t = (initial as any).thumb as string;
-            const src = t.startsWith("http") ? t : `${BASE_URL}${t}`;
-            return <img src={src} alt="upload preview" className="w-12 h-12 object-cover rounded" />;
-          })()}
-          <h2 className="text-xl font-semibold flex-1">{isEdit ? "Edit Event" : "New Event"}</h2>
-        </div>
-
-        <label className="block">
-          <span className="text-sm">Title</span>
-          <input className="mt-1 w-full border rounded px-2 py-1" value={form.title} onChange={change("title")} />
+        <label className="field">
+          <span>Title</span>
+          <input value={title} onChange={(e) => setTitle(e.target.value)} />
         </label>
 
-        <label className="block">
-          <span className="text-sm">Start</span>
-          <input type="datetime-local" className="mt-1 w-full border rounded px-2 py-1" value={form.start} onChange={change("start")} />
+        <label className="field">
+          <span>Start</span>
+          <input type="datetime-local" value={start} onChange={(e) => setStart(e.target.value)} />
         </label>
 
-        <label className="block">
-          <span className="text-sm">End</span>
-          <input type="datetime-local" className="mt-1 w-full border rounded px-2 py-1" value={form.end} onChange={change("end")} />
+        <label className="field">
+          <span>End</span>
+          <input type="datetime-local" value={end} onChange={(e) => setEnd(e.target.value)} />
+        </label>
+
+        <label className="field">
+          <span>Description</span>
+          <textarea value={description} onChange={(e) => setDescription(e.target.value)} />
+        </label>
+
+        <label className="field">
+          <span>Location</span>
+          <input value={location} onChange={(e) => setLocation(e.target.value)} />
         </label>
 
         {!isEdit && (
-          <div className="border-t pt-3">
-            <button type="button" onClick={() => setRepeatOpen(!repeatOpen)} className="text-sm underline">
-              {repeatOpen ? "Hide repeat" : "Repeat…"}
-            </button>
-
-            {repeatOpen && (
-              <div className="mt-3 space-y-3">
-                <div className="flex flex-wrap gap-2">
-                  {WEEK.map((lbl, i) => (
-                    <label key={lbl} className="text-sm inline-flex items-center gap-1">
-                      <input type="checkbox" checked={!!(repeatDays as any)[i]} onChange={() => toggleDay(i)} />
-                      {lbl}
-                    </label>
-                  ))}
-                </div>
-
-                <label className="block text-sm">
-                  <span className="text-sm">Until</span>
-                  <input type="date" className="mt-1 w-full border rounded px-2 py-1" value={repeatUntil} onChange={(e) => setRepeatUntil(e.target.value)} />
-                </label>
-
-                <p className="text-xs text-gray-500">Creates an event on each selected weekday through the “until” date, preserving times.</p>
+          <div className="repeat-box">
+            <div className="repeat-row">
+              <span>Repeat on:</span>
+              <div className="repeat-days">
+                {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((lab, idx) => (
+                  <button
+                    key={lab}
+                    className={repeatDays[idx] ? "day on" : "day"}
+                    onClick={() => toggleDay(idx)}
+                    type="button"
+                  >
+                    {lab}
+                  </button>
+                ))}
               </div>
-            )}
+            </div>
+
+            <div className="repeat-row">
+              <span>Until:</span>
+              <input
+                type="date"
+                value={repeatUntil}
+                onChange={(e) => setRepeatUntil(e.target.value)}
+              />
+            </div>
+
+            {providedEvery && providedEvery > 1 ? (
+              <div className="repeat-hint">Every {providedEvery} weeks (from parsed text)</div>
+            ) : null}
           </div>
         )}
 
-        <div className="flex justify-between pt-3">
-          {isEdit && (
-            <button type="button" onClick={handleDelete} className="text-red-600 hover:underline">
-              Delete
+        <div className="actions">
+          <button type="button" onClick={handleSuggest}>
+            Suggest next-free
+          </button>
+
+          <div className="actions-right">
+            {isEdit ? (
+              <button type="button" onClick={handleDelete}>
+                Delete
+              </button>
+            ) : null}
+            <button type="button" onClick={onClose}>
+              Cancel
             </button>
-          )}
-          <div className="ml-auto space-x-2">
-            <button type="button" onClick={onClose} className="px-3 py-1">Cancel</button>
-            <button type="button" onClick={handleSave} className="bg-black text-white px-3 py-1 rounded">Save</button>
+            <button type="button" onClick={handleSave}>
+              Save
+            </button>
           </div>
         </div>
       </div>
