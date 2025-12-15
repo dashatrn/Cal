@@ -3,7 +3,9 @@
 ### a smart calendar web app (OCR + parsing + scheduling intelligence)
 
 > Drop in a screenshot/PDF or type a plan in plain English.  
-> Cal extracts event details, saves them to your calendar, and helps you schedule around ## Table of Contents
+> Cal extracts event details, saves them to your calendar, and helps you schedule around
+
+## Table of Contents
 - [Background](#background)
 - [What It Does](#what-it-does)
 - [Try It](#try-it)
