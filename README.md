@@ -26,5 +26,4 @@ In this day and age, scheduling meetings from seemingly endless types of sources
 
 ### Scheduling intelligence
 - **Conflict detection**: prevents overlapping events.
-- **Next-free suggestion**: given a proposed time window, Cal finds the next available slot of the same duration.
-
+- **Next-free suggestion**: given a proposed time window, Cal finds the next available slot of the same duration
