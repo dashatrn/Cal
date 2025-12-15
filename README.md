@@ -8,7 +8,6 @@
 ## Table of Contents
 - [Background](#background)
 - [What It Does](#what-it-does)
-- [Try It](#try-it)
 
 
 ## Background
