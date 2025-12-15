@@ -27,7 +27,3 @@ In this day and age, scheduling meetings from seemingly endless types of sources
 - **Conflict detection**: prevents overlapping events.
 - **Next-free suggestion**: given a proposed time window, Cal finds the next available slot of the same duration.
 
-
-## Try it
-
-Live demo: [cal-frontend-4k1s.onrender.com](https://cal-frontend-4k1s.onrender.com/)
