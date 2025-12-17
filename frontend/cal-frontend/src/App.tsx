@@ -95,18 +95,15 @@ export default function App() {
 
   const [anchor, setAnchor] = useState<Date>(new Date());
   const year = anchor.getFullYear();
+  const zodiac = zodiacForYear(year).toUpperCase(); // replaces the big red month label
 
-  // Center title: zodiac only in Year view, month name in Week/Month/Day
   const [viewType, setViewType] = useState<string>("timeGridWeek");
+
   const [yearMode, setYearMode] = useState<boolean>(() => {
     return typeof window !== "undefined" && localStorage.getItem(LS_YEAR) === "1";
   });
   const yearModeRef = useRef<boolean>(yearMode);
   useEffect(() => { yearModeRef.current = yearMode; }, [yearMode]);
-
-  const monthLabel = yearMode
-    ? zodiacForYear(year).toUpperCase()
-    : anchor.toLocaleString("en-US", { month: "long" }).toUpperCase();
 
   const [frameMode, setFrameMode] = useState<FrameMode>(() => {
     const saved = (typeof window !== "undefined" && localStorage.getItem(LS_FRAME)) as FrameMode | null;
@@ -280,9 +277,7 @@ export default function App() {
   const setWeek = () => {
     calRef.current?.getApi().changeView("timeGridWeek");
     setYearMode(false);
-    yearModeRef.current = false;
     localStorage.setItem(LS_YEAR, "0");
-    localStorage.setItem(LS_VIEW, "timeGridWeek");
     setViewType("timeGridWeek");
     setMenuCalOpen(false);
   };
@@ -290,9 +285,7 @@ export default function App() {
   const setMonth = () => {
     calRef.current?.getApi().changeView("dayGridMonth");
     setYearMode(false);
-    yearModeRef.current = false;
     localStorage.setItem(LS_YEAR, "0");
-    localStorage.setItem(LS_VIEW, "dayGridMonth");
     setViewType("dayGridMonth");
     setMenuCalOpen(false);
   };
@@ -301,7 +294,6 @@ export default function App() {
     const api = calRef.current?.getApi();
     const cur = api?.getDate() || new Date();
     setYearMode(true);
-    yearModeRef.current = true;
     localStorage.setItem(LS_YEAR, "1");
     setViewType("year");
     setYearJump(cur);
@@ -344,16 +336,12 @@ export default function App() {
   }
 
   const handleYearPick = (y: number, m: number) => {
+    // Open Month view for the selected tile
     const api = calRef.current?.getApi();
-    const target = new Date(y, m, 1);
-    // Switch out of Year view and open the full Month
     setYearMode(false);
-    yearModeRef.current = false;
     localStorage.setItem(LS_YEAR, "0");
-    localStorage.setItem(LS_VIEW, "dayGridMonth");
     setViewType("dayGridMonth");
-    api?.changeView("dayGridMonth", target);
-    setAnchor(target);
+    api?.changeView("dayGridMonth", new Date(y, m, 1));
   };
 
   return (
@@ -397,10 +385,10 @@ export default function App() {
           <img aria-hidden src="/roses-divider.png" className="v-rose v-rose-right" />
         </div>
 
-        {/* Center title: YEAR – MONTH/ZODIAC – YEAR */}
+        {/* Red center title now shows zodiac animal for the current year */}
         <div className={`v-monthbar ${yearMode ? "is-compact" : (viewType === "dayGridMonth" ? "" : "is-compact")}`}>
           <div className="v-year">{year}</div>
-          <div className="v-month">{monthLabel}</div>
+          <div className="v-month">{zodiac}</div>
           <div className="v-year">{year}</div>
         </div>
 
@@ -491,4 +479,4 @@ export default function App() {
       />
     </>
   );
-} 
+}

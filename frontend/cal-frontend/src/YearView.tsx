@@ -1,9 +1,9 @@
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 /**
- * Scrollable Year view.
+ * Scrollable infinite Year view.
  * - opens centered on jumpTo/current month
- * - spans a wide range of years without janky infinite loading
+ * - extends as you scroll
  * - month tiles are clickable to open Month view in the parent
  */
 type Props = {
@@ -71,11 +71,51 @@ function MonthTile({ y, m, onPick }: { y: number; m: number; onPick?: (y: number
 export default function YearView({ jumpTo, onAnchorChange, onPick }: Props) {
   const hostRef = useRef<HTMLDivElement | null>(null);
 
-  // Wide but finite range (no weird 2000 clamp, still feels huge)
+  const base = jumpTo ?? new Date();
+  const baseYear = base.getFullYear();
+  const [startYear, setStartYear] = useState<number>(baseYear - 20);
+  const [endYear, setEndYear]     = useState<number>(baseYear + 20);
+
   const years = useMemo(() => {
     const ys: number[] = [];
-    for (let y = 1900; y <= 2100; y++) ys.push(y);
+    for (let y = startYear; y <= endYear; y++) ys.push(y);
     return ys;
+  }, [startYear, endYear]);
+
+  // Throttled scroll extender — avoids jank while keeping “infinite” feel.
+  useEffect(() => {
+    const el = hostRef.current;
+    if (!el) return;
+
+    let raf = 0;
+    const PAD = 800; // px
+
+    const onScroll = () => {
+      if (raf) return;
+      raf = requestAnimationFrame(() => {
+        raf = 0;
+        const nearTop = el.scrollTop < PAD;
+        const nearBottom = el.scrollTop + el.clientHeight > el.scrollHeight - PAD;
+
+        if (nearTop) {
+          const before = el.scrollHeight;
+          setStartYear((y) => y - 5);
+          // preserve viewport after DOM grows above
+          requestAnimationFrame(() => {
+            const after = el.scrollHeight;
+            el.scrollTop += (after - before);
+          });
+        } else if (nearBottom) {
+          setEndYear((y) => y + 5);
+        }
+      });
+    };
+
+    el.addEventListener("scroll", onScroll);
+    return () => {
+      el.removeEventListener("scroll", onScroll);
+      if (raf) cancelAnimationFrame(raf);
+    };
   }, []);
 
   // Observe which year is near the top to update the “anchor”
@@ -107,18 +147,21 @@ export default function YearView({ jumpTo, onAnchorChange, onPick }: Props) {
     const el = hostRef.current;
     if (!el) return;
 
-    const target = jumpTo ?? new Date();
+    const target = jumpTo ?? base;
     const y = target.getFullYear();
     const m = target.getMonth();
 
+    if (y < startYear) setStartYear(y - 6);
+    if (y > endYear)   setEndYear(y + 6);
+
     const seek = () => {
       const node = el.querySelector<HTMLElement>(`#ym-${y}-${String(m + 1).padStart(2, "0")}`);
-      if (node) {
-        node.scrollIntoView({ block: "nearest" }); // gentle; avoids downward nudge
-      }
+      if (node) node.scrollIntoView({ block: "nearest" }); // gentler than "start" (prevents slight downward nudge)
+      else setTimeout(seek, 40);
     };
     seek();
-  }, [jumpTo]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [jumpTo, startYear, endYear]);
 
   return (
     <div ref={hostRef} className="yv-wrap" aria-label="Year view">
