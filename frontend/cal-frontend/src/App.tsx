@@ -75,13 +75,6 @@ function ToolboxIcon() {
   );
 }
 
-/** Chinese zodiac (solar year). Base: 2020 → Rat */
-const ZODIAC = ["Rat","Ox","Tiger","Rabbit","Dragon","Snake","Horse","Goat","Monkey","Rooster","Dog","Pig"] as const;
-function zodiacForYear(y: number): string {
-  const idx = ((y - 2020) % 12 + 12) % 12;
-  return ZODIAC[idx];
-}
-
 export default function App() {
   const [events, setEvents] = useState<CalEvent[]>([]);
   const [modalInit, setModalInit] = useState<ApiEvent | undefined | null>(null);
@@ -94,19 +87,16 @@ export default function App() {
   const toolsRef = useRef<HTMLDivElement | null>(null);
 
   const [anchor, setAnchor] = useState<Date>(new Date());
+  const monthName = anchor.toLocaleString("en-US", { month: "long" }).toUpperCase();
   const year = anchor.getFullYear();
 
-  // Center title: zodiac only in Year view, month name in Week/Month/Day
   const [viewType, setViewType] = useState<string>("timeGridWeek");
+
   const [yearMode, setYearMode] = useState<boolean>(() => {
     return typeof window !== "undefined" && localStorage.getItem(LS_YEAR) === "1";
   });
   const yearModeRef = useRef<boolean>(yearMode);
   useEffect(() => { yearModeRef.current = yearMode; }, [yearMode]);
-
-  const monthLabel = yearMode
-    ? zodiacForYear(year).toUpperCase()
-    : anchor.toLocaleString("en-US", { month: "long" }).toUpperCase();
 
   const [frameMode, setFrameMode] = useState<FrameMode>(() => {
     const saved = (typeof window !== "undefined" && localStorage.getItem(LS_FRAME)) as FrameMode | null;
@@ -280,9 +270,7 @@ export default function App() {
   const setWeek = () => {
     calRef.current?.getApi().changeView("timeGridWeek");
     setYearMode(false);
-    yearModeRef.current = false;
     localStorage.setItem(LS_YEAR, "0");
-    localStorage.setItem(LS_VIEW, "timeGridWeek");
     setViewType("timeGridWeek");
     setMenuCalOpen(false);
   };
@@ -290,18 +278,16 @@ export default function App() {
   const setMonth = () => {
     calRef.current?.getApi().changeView("dayGridMonth");
     setYearMode(false);
-    yearModeRef.current = false;
     localStorage.setItem(LS_YEAR, "0");
-    localStorage.setItem(LS_VIEW, "dayGridMonth");
     setViewType("dayGridMonth");
     setMenuCalOpen(false);
   };
 
   const setYear = () => {
+    // Jump Year view to whatever date you’re currently on in month/week/day
     const api = calRef.current?.getApi();
     const cur = api?.getDate() || new Date();
     setYearMode(true);
-    yearModeRef.current = true;
     localStorage.setItem(LS_YEAR, "1");
     setViewType("year");
     setYearJump(cur);
@@ -342,19 +328,6 @@ export default function App() {
     th.addEventListener("mouseleave", leave);
     th.addEventListener("click", click);
   }
-
-  const handleYearPick = (y: number, m: number) => {
-    const api = calRef.current?.getApi();
-    const target = new Date(y, m, 1);
-    // Switch out of Year view and open the full Month
-    setYearMode(false);
-    yearModeRef.current = false;
-    localStorage.setItem(LS_YEAR, "0");
-    localStorage.setItem(LS_VIEW, "dayGridMonth");
-    setViewType("dayGridMonth");
-    api?.changeView("dayGridMonth", target);
-    setAnchor(target);
-  };
 
   return (
     <>
@@ -397,20 +370,15 @@ export default function App() {
           <img aria-hidden src="/roses-divider.png" className="v-rose v-rose-right" />
         </div>
 
-        {/* Center title: YEAR – MONTH/ZODIAC – YEAR */}
         <div className={`v-monthbar ${yearMode ? "is-compact" : (viewType === "dayGridMonth" ? "" : "is-compact")}`}>
           <div className="v-year">{year}</div>
-          <div className="v-month">{monthLabel}</div>
+          <div className="v-month">{monthName}</div>
           <div className="v-year">{year}</div>
         </div>
 
         <main className={`relative flex-1 min-h-0 px-0 pb-0 ${frameClass} ${viewClass}`}>
           {yearMode ? (
-            <YearView
-              jumpTo={yearJump}
-              onAnchorChange={(d) => setAnchor(d)}
-              onPick={handleYearPick}
-            />
+            <YearView jumpTo={yearJump} onAnchorChange={(d) => setAnchor(d)} />
           ) : (
             <FullCalendar
               ref={calRef}
@@ -491,4 +459,4 @@ export default function App() {
       />
     </>
   );
-} 
+}
