@@ -69,11 +69,66 @@ def ocr_to_text(data: bytes) -> str:
         except Exception:
             pass
 
+def pdf_ocr_to_text(data: bytes) -> str:
+    """
+    OCR fallback for scanned PDFs:
+    - Render PDF pages to images using PyMuPDF (fitz)
+    - Run Tesseract on each page
+    """
+    # Keep this lazy so the API still starts even if PyMuPDF isn't installed.
+    try:
+        import fitz  # PyMuPDF
+    except Exception:
+        return ""
+
+    max_pages = int(os.getenv("PDF_OCR_MAX_PAGES", "10"))
+    zoom = float(os.getenv("PDF_OCR_ZOOM", "2.0"))  # ~144 DPI at 2.0
+
+    try:
+        doc = fitz.open(stream=data, filetype="pdf")
+    except Exception:
+        return ""
+
+    texts: list[str] = []
+    try:
+        page_count = min(len(doc), max_pages) if max_pages > 0 else len(doc)
+        mat = fitz.Matrix(zoom, zoom)
+        for i in range(page_count):
+            try:
+                page = doc.load_page(i)
+                pix = page.get_pixmap(matrix=mat, alpha=False)
+                if pix.n == 1:
+                    mode = "L"
+                else:
+                    mode = "RGB"
+                img = Image.frombytes(mode, (pix.width, pix.height), pix.samples)
+                texts.append(pytesseract.image_to_string(img, config="--psm 6") or "")
+            except Exception:
+                # best-effort per page
+                continue
+    finally:
+        try:
+            doc.close()
+        except Exception:
+            pass
+
+    return "\n".join(t for t in texts if t).strip()
+
 def pdf_to_text(data: bytes) -> str:
+    """
+    Extract text from a PDF.
+
+    Strategy:
+    1) Try native text extraction via pypdf (fast for "digital" PDFs)
+    2) If that yields too little text, fall back to OCR for scanned PDFs
+    """
+    min_chars = int(os.getenv("PDF_TEXT_MIN_CHARS", "60"))
+
     # pypdf can read from file-like; simplest is temp file
     with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
         tmp.write(data)
         pdf_path = tmp.name
+    extracted = ""
     try:
         reader = PdfReader(pdf_path)
         texts = []
@@ -82,12 +137,24 @@ def pdf_to_text(data: bytes) -> str:
                 texts.append(page.extract_text() or "")
             except Exception:
                 pass
-        return "\n".join(texts)
+        extracted = "\n".join(texts).strip()
     finally:
         try:
             Path(pdf_path).unlink(missing_ok=True)
         except Exception:
             pass
+
+    # If pypdf got enough text, we're done.
+    if extracted and len(extracted) >= min_chars:
+        return extracted
+
+    # Otherwise, try OCR fallback (best effort).
+    ocr_text = pdf_ocr_to_text(data)
+    if ocr_text:
+        return ocr_text
+
+    # If OCR fails, return whatever we extracted (may be empty).
+    return extracted
 
 # ───────────────────────── Regex & parsing helpers ──────────────────
 DOW_MAP = {
@@ -453,180 +520,214 @@ def parse_text_into_fields(raw_prompt: str, tz_name: str | None) -> Dict[str, An
     if end_local <= start_local:
         end_local += timedelta(hours=1)
 
-    start_iso = build_iso(start_local, tz)
-    end_iso   = build_iso(end_local,   tz)
-
-    out: Dict[str, Any] = { "title": title, "start": start_iso, "end": end_iso }
-    if location: out["location"] = location
-    if description: out["description"] = description
-    if repeat_days: out["repeatDays"] = repeat_days
-    if until_d: out["repeatUntil"] = until_d.isoformat()
-    if every_weeks: out["repeatEveryWeeks"] = every_weeks
+    out: Dict[str, Any] = {
+        "title": title,
+        "start": build_iso(start_local, tz),
+        "end": build_iso(end_local, tz),
+    }
+    if repeat_days:
+        out["repeatDays"] = repeat_days
+    if until_d:
+        out["repeatUntil"] = until_d.isoformat()
+    if every_weeks:
+        out["repeatEveryWeeks"] = every_weeks
+    if location:
+        out["location"] = location
+    if description:
+        out["description"] = description
     return out
 
-# ───────────────────────── Uploads → OCR/PDF → parse ────────────────
-@app.post("/uploads", status_code=201)
-async def upload_file(file: UploadFile = File(...)):
-    raw = await file.read()
-    ext = (Path(file.filename).suffix or ".bin").lower()
-    filename = f"{uuid.uuid4().hex}{ext}"
-    dest = UPLOAD_DIR / filename
-    dest.write_bytes(raw)
+# ───────────────────────── API Schemas ──────────────────────────────
+from pydantic import BaseModel
 
-    # Extract text based on type
-    text_ = ""
-    is_image = ext in {".png", ".jpg", ".jpeg", ".webp", ".tif", ".tiff", ".bmp"}
-    is_pdf = ext == ".pdf"
+class ParseIn(BaseModel):
+    prompt: str
+    tz: str | None = None
 
+class ParseOut(BaseModel):
+    title: str | None = None
+    start: str | None = None
+    end: str | None = None
+    repeatDays: list[int] | None = None
+    repeatUntil: str | None = None
+    repeatEveryWeeks: int | None = None
+    location: str | None = None
+    description: str | None = None
+
+# ───────────────────────── /parse endpoint ──────────────────────────
+@app.post("/parse", response_model=ParseOut)
+def parse_endpoint(payload: ParseIn):
+    return parse_text_into_fields(payload.prompt, payload.tz)
+
+# ───────────────────────── Upload ingestion ─────────────────────────
+@app.post("/uploads")
+async def upload_file(
+    file: UploadFile = File(...),
+    tz: str | None = Query(default=None),
+):
+    content = await file.read()
+    if not content:
+        raise HTTPException(status_code=400, detail="Empty file")
+
+    filename = file.filename or "upload"
+    ext = (Path(filename).suffix or "").lower()
+    is_pdf = ext == ".pdf" or (file.content_type or "").lower() == "application/pdf"
+
+    if is_pdf:
+        extracted = pdf_to_text(content)
+    else:
+        extracted = ocr_to_text(content)
+
+    fields = parse_text_into_fields(extracted, tz)
+
+    # store original file in uploads so frontend can show it if needed
+    safe_name = f"{uuid.uuid4().hex}{ext if ext else ''}"
+    out_path = UPLOAD_DIR / safe_name
     try:
-        if is_image:
-            text_ = ocr_to_text(raw)
-        elif is_pdf:
-            text_ = pdf_to_text(raw)
-        else:
-            # Fallback: try OCR anyway (e.g., unknown image)
-            text_ = ocr_to_text(raw)
+        out_path.write_bytes(content)
     except Exception:
-        raise HTTPException(status_code=422, detail="Could not read that file")
+        pass
 
-    # Use our core parser (no tz passed here — client will localize after)
-    fields = parse_text_into_fields(text_, None)
+    return {
+        "sourceText": extracted,
+        "fields": fields,
+        "fileUrl": f"/uploads/{safe_name}",
+    }
 
-    # Provide thumb only for images (frontend shows a tiny preview)
-    if is_image:
-        fields["thumb"] = f"/uploads/{filename}"
+# ───────────────────────── Event CRUD ───────────────────────────────
+def _overlaps(a_start: datetime, a_end: datetime, b_start: datetime, b_end: datetime) -> bool:
+    return a_start < b_end and b_start < a_end
 
-    # Basic sanity: if we couldn’t find both date and time, signal a 422
-    if not fields.get("start") or not fields.get("end"):
-        raise HTTPException(status_code=422, detail="Could not parse date/time from the file")
+def _parse_iso_z(s: str) -> datetime:
+    dt = iso_parse(s)
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(timezone.utc)
 
-    return fields
-
-# ───────────────────────── Parse prompt (TZ aware) ──────────────────
-@app.post("/parse")
-async def parse_prompt(payload: dict):
-    """
-    Expects: { "prompt": string, "tz": "America/Los_Angeles" or "ET"/"EST"/... }
-    Returns: { title?, start?, end?, repeatDays?, repeatUntil?, repeatEveryWeeks?, location?, description? }
-    All times returned as UTC ISO Z; repeatUntil as YYYY-MM-DD (local date)
-    """
-    prompt = (payload.get("prompt") or "").strip()
-    tz_name = payload.get("tz") or "UTC"
-    if not prompt:
-        return {}
-    try:
-        # If tz is an abbreviation, parse_text_into_fields will map it
-        return parse_text_into_fields(prompt, tz_name)
-    except Exception:
-        # Be forgiving; worst case, return empty so UI can continue
-        return {}
-
-# ───────────────────────── Suggest next free slot ───────────────────
-@app.get("/suggest")
-def suggest_next_free(start: str, end: str, db: Session = Depends(get_db)):
-    try:
-        s = iso_parse(start)
-        e = iso_parse(end)
-    except Exception:
-        raise HTTPException(status_code=422, detail="Invalid ISO datetimes")
-
-    if e <= s:
-        e = s + timedelta(hours=1)
-
-    duration = e - s
-    while True:
-        conflict = db.scalars(
-            select(Event).where(and_(Event.start < s + duration, Event.end > s))
-        ).first()
-        if not conflict:
-            return {
-                "start": s.astimezone(timezone.utc).isoformat().replace("+00:00", "Z"),
-                "end":   (s + duration).astimezone(timezone.utc).isoformat().replace("+00:00", "Z"),
-            }
-        s = max(s, conflict.end)
-
-# ───────────────────────── Events CRUD & list (range) ───────────────
 @app.get("/events", response_model=list[EventOut])
 def list_events(
-    start: Optional[datetime] = Query(default=None),
-    end:   Optional[datetime] = Query(default=None),
+    start: str = Query(...),
+    end: str = Query(...),
     db: Session = Depends(get_db),
 ):
-    q = select(Event)
-    if start and end:
-        q = q.where(and_(Event.start < end, Event.end > start))
-    return db.scalars(q).all()
+    start_dt = _parse_iso_z(start)
+    end_dt = _parse_iso_z(end)
+    q = select(Event).where(and_(Event.start < end_dt, Event.end > start_dt)).order_by(Event.start.asc())
+    rows = db.execute(q).scalars().all()
+    return rows
 
-@app.post("/events", response_model=EventOut, status_code=201)
-def create_event(data: EventIn, db: Session = Depends(get_db)):
-    payload = data.model_dump()
-    overlap_stmt = select(Event).where(and_(Event.start < payload["end"], Event.end > payload["start"]))
-    conflict = db.scalars(overlap_stmt).first()
-    if conflict:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail={
-                "message": "Time overlaps with another event.",
-                "conflicts": [{
-                    "id": conflict.id,
-                    "title": conflict.title,
-                    "start": conflict.start.isoformat(),
-                    "end": conflict.end.isoformat(),
-                }],
-            },
-        )
-    evt = Event(**payload)
-    db.add(evt); db.commit(); db.refresh(evt)
-    return evt
+@app.post("/events", response_model=EventOut, status_code=status.HTTP_201_CREATED)
+def create_event(payload: EventIn, db: Session = Depends(get_db)):
+    start_dt = _parse_iso_z(payload.start)
+    end_dt = _parse_iso_z(payload.end)
+
+    q = select(Event).where(and_(Event.start < end_dt, Event.end > start_dt))
+    existing = db.execute(q).scalars().all()
+    if existing:
+        raise HTTPException(status_code=409, detail="Event conflicts with an existing event")
+
+    ev = Event(
+        title=payload.title,
+        start=start_dt,
+        end=end_dt,
+        repeatDays=payload.repeatDays,
+        repeatUntil=payload.repeatUntil,
+        repeatEveryWeeks=payload.repeatEveryWeeks,
+        description=getattr(payload, "description", None),
+        location=getattr(payload, "location", None),
+    )
+    db.add(ev)
+    db.commit()
+    db.refresh(ev)
+    return ev
 
 @app.put("/events/{event_id}", response_model=EventOut)
 def update_event(event_id: int, payload: EventIn, db: Session = Depends(get_db)):
-    overlap_stmt = select(Event).where(
-        and_(Event.id != event_id, Event.start < payload.end, Event.end > payload.start)
-    )
-    conflict = db.scalars(overlap_stmt).first()
-    if conflict:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail={
-                "message": "Time overlaps with another event.",
-                "conflicts": [{
-                    "id": conflict.id,
-                    "title": conflict.title,
-                    "start": conflict.start.isoformat(),
-                    "end": conflict.end.isoformat(),
-                }],
-            },
-        )
-    event = db.get(Event, event_id)
-    if event is None:
+    ev = db.get(Event, event_id)
+    if not ev:
         raise HTTPException(status_code=404, detail="Event not found")
-    for field, value in payload.model_dump().items():
-        setattr(event, field, value)
-    db.commit(); db.refresh(event)
-    return event
+
+    start_dt = _parse_iso_z(payload.start)
+    end_dt = _parse_iso_z(payload.end)
+
+    q = select(Event).where(and_(Event.id != event_id, Event.start < end_dt, Event.end > start_dt))
+    existing = db.execute(q).scalars().all()
+    if existing:
+        raise HTTPException(status_code=409, detail="Event conflicts with an existing event")
+
+    ev.title = payload.title
+    ev.start = start_dt
+    ev.end = end_dt
+    ev.repeatDays = payload.repeatDays
+    ev.repeatUntil = payload.repeatUntil
+    ev.repeatEveryWeeks = payload.repeatEveryWeeks
+    ev.description = getattr(payload, "description", None)
+    ev.location = getattr(payload, "location", None)
+
+    db.commit()
+    db.refresh(ev)
+    return ev
 
 @app.delete("/events/{event_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_event(event_id: int, db: Session = Depends(get_db)):
-    event = db.get(Event, event_id)
-    if event is None:
+    ev = db.get(Event, event_id)
+    if not ev:
         raise HTTPException(status_code=404, detail="Event not found")
-    db.delete(event); db.commit()
+    db.delete(ev)
+    db.commit()
+    return
+
+# ───────────────────────── Suggest next-free ─────────────────────────
+@app.get("/suggest")
+def suggest_next_free(
+    start: str = Query(...),
+    end: str = Query(...),
+    db: Session = Depends(get_db),
+):
+    start_dt = _parse_iso_z(start)
+    end_dt = _parse_iso_z(end)
+    duration = end_dt - start_dt
+    if duration.total_seconds() <= 0:
+        raise HTTPException(status_code=400, detail="Invalid duration")
+
+    # find conflicts in proposed window
+    q = select(Event).where(and_(Event.start < end_dt, Event.end > start_dt)).order_by(Event.start.asc())
+    conflicts = db.execute(q).scalars().all()
+
+    if not conflicts:
+        return {"suggestedStart": start_dt.isoformat().replace("+00:00", "Z"), "suggestedEnd": end_dt.isoformat().replace("+00:00", "Z")}
+
+    # push forward to after the last conflict end (simple heuristic)
+    new_start = max(c.end for c in conflicts)
+    new_end = new_start + duration
+
+    # If new slot conflicts too, keep pushing
+    while True:
+        q2 = select(Event).where(and_(Event.start < new_end, Event.end > new_start)).order_by(Event.start.asc())
+        conflicts2 = db.execute(q2).scalars().all()
+        if not conflicts2:
+            break
+        new_start = max(c.end for c in conflicts2)
+        new_end = new_start + duration
+
+    return {"suggestedStart": new_start.isoformat().replace("+00:00", "Z"), "suggestedEnd": new_end.isoformat().replace("+00:00", "Z")}
 
 # ───────────────────────── ICS export ───────────────────────────────
 def _ics_dt(dt: datetime) -> str:
-    return dt.astimezone(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    # dt is stored UTC
+    dtu = dt.astimezone(timezone.utc)
+    return dtu.strftime("%Y%m%dT%H%M%SZ")
 
-@app.get("/events.ics")
+@app.get("/export/ics")
 def export_ics(
-    start: Optional[datetime] = Query(default=None),
-    end:   Optional[datetime] = Query(default=None),
+    start: str = Query(...),
+    end: str = Query(...),
     db: Session = Depends(get_db),
 ):
-    q = select(Event)
-    if start and end:
-        q = q.where(and_(Event.start < end, Event.end > start))
-    rows = db.scalars(q).all()
+    start_dt = _parse_iso_z(start)
+    end_dt = _parse_iso_z(end)
+    q = select(Event).where(and_(Event.start < end_dt, Event.end > start_dt)).order_by(Event.start.asc())
+    rows = db.execute(q).scalars().all()
 
     lines = [
         "BEGIN:VCALENDAR",
@@ -635,15 +736,17 @@ def export_ics(
     ]
     now_utc = datetime.now(timezone.utc)
     for e in rows:
+        summary = (e.title or "").replace("\n", " ")
+        description = (getattr(e, "description", "") or "").replace("\n", "\n ")
         lines += [
             "BEGIN:VEVENT",
             f"UID:cal-{e.id}@local",
             f"DTSTAMP:{_ics_dt(now_utc)}",
             f"DTSTART:{_ics_dt(e.start)}",
             f"DTEND:{_ics_dt(e.end)}",
-            f"SUMMARY:{(e.title or '').replace('\\n',' ')}",
-            *( [f"LOCATION:{e.location}"] if getattr(e, 'location', None) else [] ),
-            f"DESCRIPTION:{(getattr(e, 'description', '') or '').replace('\\n','\\n ')}",
+            f"SUMMARY:{summary}",
+            *( [f"LOCATION:{e.location}"] if getattr(e, "location", None) else [] ),
+            f"DESCRIPTION:{description}",
             "END:VEVENT",
         ]
     lines.append("END:VCALENDAR")
