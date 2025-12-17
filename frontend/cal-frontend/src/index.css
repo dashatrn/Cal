@@ -50,7 +50,7 @@ html, body {
   min-height: 0;
 
   display: grid;
-  grid-template-rows: auto auto 1fr; /* plaque, title bar, calendar */
+  grid-template-rows: auto auto 1fr; /* plaque, monthbar, calendar */
   position: relative;
 }
 
@@ -96,15 +96,12 @@ html, body {
   transform: translateY(-50%);
 }
 
-/* ===================== TITLE BAR ===================== */
+/* ===================== MONTH TITLE BAR ===================== */
 .v-monthbar {
   display: grid;
   grid-template-columns: 1fr auto 1fr;
   align-items: center;
   padding: 4px 44px 18px;
-
-  /* Fix vertical size so Year view header never nudges the layout */
-  min-height: 112px;
 }
 .v-year {
   font-weight: 700;
@@ -121,7 +118,7 @@ html, body {
   text-align: center;
   text-shadow: 0 2px 2px rgba(0,0,0,.22);
 }
-.v-monthbar.is-compact { padding: 0 44px 6px; min-height: 72px; }
+.v-monthbar.is-compact { padding: 0 44px 6px; }
 .v-monthbar.is-compact .v-month { font-size: 44px; letter-spacing: .05em; }
 .v-monthbar.is-compact .v-year  { font-size: 28px; }
 
@@ -264,7 +261,10 @@ html, body {
   border-bottom: 0 !important;
 }
 
-/* -------- FLOATING: MONTH/YEAR — column alignment fix -------- */
+/* -------- FLOATING: MONTH/YEAR — column alignment fix --------
+   1) force fixed layout + collapsed borders
+   2) draw *only left* vertical borders for both header and body
+   3) remove wrapper right borders (even from sync tables) */
 .v-paper > main.is-floating.view-month .fc-theme-standard .fc-scrollgrid,
 .v-paper > main.is-floating.view-year  .fc-theme-standard .fc-scrollgrid{
   border-top: var(--ledger-top) solid var(--ink) !important;
@@ -298,10 +298,10 @@ html, body {
   border-left: 0 !important;
 }
 
-/* Keep header bottom line (fixes missing line under “FRI.”) */
+/* ⚠️ Keep header bottom line (fixes missing line under “FRI.”) */
 .v-paper > main.is-floating.view-month .fc .fc-col-header thead tr > th:last-child,
 .v-paper > main.is-floating.view-year  .fc .fc-col-header thead tr > th:last-child {
-  border-right: 0 !important;
+  border-right: 0 !important; /* do NOT remove border-bottom here */
 }
 
 /* Body: remove phantom right & bottom edges only where appropriate */
@@ -319,12 +319,10 @@ html, body {
   border-right: 0 !important;
 }
 
-/* ===================== TODAY SHADING (week/day/month) ===================== */
+/* ===================== TODAY SHADING (week/day) ===================== */
 .v-paper > main.view-week .fc .fc-day-today,
-.v-paper > main.view-day  .fc .fc-day-today,
-.v-paper > main.view-month .fc .fc-day-today {
-  background: rgba(133, 41, 29, 0.16) !important;
-  box-shadow: inset 0 0 0 1px var(--accent);
+.v-paper > main.view-day  .fc .fc-day-today {
+  background: rgba(133, 41, 29, 0.10) !important;
 }
 
 /* ===================== UX HOVERS ===================== */
@@ -332,11 +330,11 @@ html, body {
 .fc .fc-daygrid-day.is-hover { box-shadow: inset 0 0 0 2px var(--accent); }
 .fc .fc-daygrid-day-top.hover-armed { cursor: pointer; background: rgba(133, 41, 29, 0.06); }
 
-/* Week: hover header -> highlight whole column (no hover styling in Day view) */
-.v-paper > main.view-week .fc .fc-col-header-cell.is-hover {
+/* Week: hover header -> highlight whole column */
+.fc .fc-col-header-cell.is-hover {
   background-image: linear-gradient(to bottom, var(--accenthover), var(--accenthover));
 } 
-.v-paper > main.view-week .fc .fc-timegrid-col.is-hover {
+.fc .fc-timegrid-col.is-hover {
   box-shadow: inset 0 0 0 2px var(--accent);
   background-image: linear-gradient(to bottom, rgba(133, 41, 29, 0.26), rgba(133, 41, 29, 0.26));
 }
@@ -345,11 +343,11 @@ html, body {
 .yv-wrap {
   height: 100%;
   overflow: auto;
-  padding: 0 18px 18px 18px;     /* no top padding to avoid the “down” nudge */
-  background: transparent;
 
-  /* keep scrollbar space reserved so width/height never jumps */
-  scrollbar-gutter: stable both-edges;
+  /* remove top padding to stop the slight vertical “push down” when switching */
+  padding: 0 18px 18px 18px;
+
+  background: transparent;
 }
 
 /* also remove the first section’s top margin to keep the top edge aligned */
@@ -358,6 +356,8 @@ html, body {
 .yv-yearsection {
   margin: 10px 6px 18px;
   border: var(--ledger-side) solid var(--ink);
+
+  /* darker surround so month tiles pop; uses the rail variable as requested */
   background: var(--rail);
 }
 
@@ -367,6 +367,8 @@ html, body {
   letter-spacing: .02em;
   padding: 6px 10px;
   border-bottom: var(--ledger-top) solid var(--ink);
+
+  /* header bar uses accent background + navface text color */
   background: var(--accent);
   color: var(--navface);
 }
@@ -383,17 +385,7 @@ html, body {
 
 .yv-month {
   border: 2px solid var(--ink);
-  background: var(--paper);
-  cursor: pointer;
-  transition: box-shadow .12s ease, border-color .12s ease;
-}
-
-/* Hover/keyboard focus: accent border ring */
-.yv-month:hover,
-.yv-month:focus-visible {
-  border-color: var(--accent);
-  box-shadow: inset 0 0 0 3px var(--accent);
-  outline: none;
+  background: var(--paper); /* stays lighter than the container for contrast */
 }
 
 .yv-monthname {
