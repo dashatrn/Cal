@@ -75,13 +75,6 @@ function ToolboxIcon() {
   );
 }
 
-/** Chinese zodiac (solar year). Base: 2020 → Rat */
-const ZODIAC = ["Rat","Ox","Tiger","Rabbit","Dragon","Snake","Horse","Goat","Monkey","Rooster","Dog","Pig"] as const;
-function zodiacForYear(y: number): string {
-  const idx = ((y - 2020) % 12 + 12) % 12;
-  return ZODIAC[idx];
-}
-
 export default function App() {
   const [events, setEvents] = useState<CalEvent[]>([]);
   const [modalInit, setModalInit] = useState<ApiEvent | undefined | null>(null);
@@ -94,8 +87,8 @@ export default function App() {
   const toolsRef = useRef<HTMLDivElement | null>(null);
 
   const [anchor, setAnchor] = useState<Date>(new Date());
+  const monthName = anchor.toLocaleString("en-US", { month: "long" }).toUpperCase();
   const year = anchor.getFullYear();
-  const zodiac = zodiacForYear(year).toUpperCase(); // replaces the big red month label
 
   const [viewType, setViewType] = useState<string>("timeGridWeek");
 
@@ -291,6 +284,7 @@ export default function App() {
   };
 
   const setYear = () => {
+    // Jump Year view to whatever date you’re currently on in month/week/day
     const api = calRef.current?.getApi();
     const cur = api?.getDate() || new Date();
     setYearMode(true);
@@ -335,15 +329,6 @@ export default function App() {
     th.addEventListener("click", click);
   }
 
-  const handleYearPick = (y: number, m: number) => {
-    // Open Month view for the selected tile
-    const api = calRef.current?.getApi();
-    setYearMode(false);
-    localStorage.setItem(LS_YEAR, "0");
-    setViewType("dayGridMonth");
-    api?.changeView("dayGridMonth", new Date(y, m, 1));
-  };
-
   return (
     <>
       <div className="v-paper">
@@ -385,20 +370,15 @@ export default function App() {
           <img aria-hidden src="/roses-divider.png" className="v-rose v-rose-right" />
         </div>
 
-        {/* Red center title now shows zodiac animal for the current year */}
         <div className={`v-monthbar ${yearMode ? "is-compact" : (viewType === "dayGridMonth" ? "" : "is-compact")}`}>
           <div className="v-year">{year}</div>
-          <div className="v-month">{zodiac}</div>
+          <div className="v-month">{monthName}</div>
           <div className="v-year">{year}</div>
         </div>
 
         <main className={`relative flex-1 min-h-0 px-0 pb-0 ${frameClass} ${viewClass}`}>
           {yearMode ? (
-            <YearView
-              jumpTo={yearJump}
-              onAnchorChange={(d) => setAnchor(d)}
-              onPick={handleYearPick}
-            />
+            <YearView jumpTo={yearJump} onAnchorChange={(d) => setAnchor(d)} />
           ) : (
             <FullCalendar
               ref={calRef}
