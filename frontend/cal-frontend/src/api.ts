@@ -16,46 +16,99 @@ export const api = axios.create({
 export interface EventIn {
   title: string;
   start: string;
-  end:   string;
+  end: string;
   description?: string | null;
   location?: string | null;
+
+  // Optional recurrence hints (safe even if backend ignores them)
+  repeatDays?: number[] | null;
+  repeatUntil?: string | null;      // YYYY-MM-DD
+  repeatEveryWeeks?: number | null; // e.g. 2 for biweekly
 }
-export interface EventOut extends EventIn { id: number }
 
-export const listEvents  = (start?: string, end?: string) =>
-  api.get<EventOut[]>("/events", { params: (start && end) ? { start, end } : undefined })
-     .then(r => r.data);
+export interface EventOut extends EventIn {
+  id: number;
+}
 
-export const createEvent = (e: EventIn)             =>
-  api.post<EventOut> ("/events",        e).then(r => r.data);
+export const listEvents = (start?: string, end?: string) =>
+  api
+    .get<EventOut[]>("/events", { params: start && end ? { start, end } : undefined })
+    .then((r) => r.data);
+
+export const createEvent = (e: EventIn) =>
+  api.post<EventOut>("/events", e).then((r) => r.data);
 
 export const updateEvent = (id: number, e: EventIn) =>
-  api.put <EventOut> (`/events/${id}`,  e).then(r => r.data);
+  api.put<EventOut>(`/events/${id}`, e).then((r) => r.data);
 
-export const deleteEvent = (id: number) =>
-  api.delete(`/events/${id}`);
+export const deleteEvent = (id: number) => api.delete(`/events/${id}`);
 
 export type ParsedFields = Partial<EventIn> & {
-  thumb?: string;
-  repeatDays?: number[];
-  repeatUntil?: string;      // YYYY-MM-DD (local)
-  repeatEveryWeeks?: number; // e.g. 2 for biweekly
+  // UI helpers
+  thumb?: string;    // absolute (prod) or relative (dev) URL for image preview
+  fileUrl?: string;  // backend-served uploaded file path (e.g. "/uploads/abc.png")
+  sourceText?: string;
 };
+
+function absolutizeMaybe(pathOrUrl: string | undefined): string | undefined {
+  if (!pathOrUrl) return undefined;
+  if (pathOrUrl.startsWith("http://") || pathOrUrl.startsWith("https://")) return pathOrUrl;
+  return `${BASE_URL}${pathOrUrl}`;
+}
 
 export async function uploadImageForParse(file: File): Promise<ParsedFields> {
   const body = new FormData();
   body.append("file", file);
-  const res = await fetch(`${BASE_URL}/uploads`, { method: "POST", body });
+
+  const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+
+  const res = await fetch(`${BASE_URL}/uploads?tz=${encodeURIComponent(tz)}`, {
+    method: "POST",
+    body,
+  });
   if (!res.ok) throw new Error("upload failed");
-  return res.json();
+
+  const data: any = await res.json();
+
+  // Support BOTH shapes:
+  // - current backend: { sourceText, fields, fileUrl }
+  // - potential future backend: fields directly
+  const fields: any = data?.fields ?? data ?? {};
+  const fileUrl: string | undefined = data?.fileUrl ?? fields?.fileUrl;
+
+  const isImage = (file.type || "").startsWith("image/");
+  const thumb =
+    isImage
+      ? (absolutizeMaybe(fields?.thumb) ?? absolutizeMaybe(fileUrl))
+      : undefined;
+
+  return {
+    ...(fields || {}),
+    fileUrl,
+    sourceText: data?.sourceText ?? fields?.sourceText,
+    thumb,
+  };
 }
 
 export const parsePrompt = (prompt: string, tz?: string) =>
-  api.post<ParsedFields>("/parse", {
-    prompt,
-    tz: tz || Intl.DateTimeFormat().resolvedOptions().timeZone,
-  }).then(r => r.data);
+  api
+    .post<ParsedFields>("/parse", {
+      prompt,
+      tz: tz || Intl.DateTimeFormat().resolvedOptions().timeZone,
+    })
+    .then((r) => r.data);
 
-export const suggestNext = (startIso: string, endIso: string) =>
-  api.get<{ start: string; end: string }>("/suggest", { params: { start: startIso, end: endIso } })
-     .then(r => r.data);
+export const suggestNext = async (startIso: string, endIso: string) => {
+  const r = await api.get<any>("/suggest", { params: { start: startIso, end: endIso } });
+  const d = r.data;
+
+  // Support backend returning either {start,end} or {suggestedStart,suggestedEnd}
+  if (d && typeof d === "object") {
+    if (typeof d.start === "string" && typeof d.end === "string") return { start: d.start, end: d.end };
+    if (typeof d.suggestedStart === "string" && typeof d.suggestedEnd === "string") {
+      return { start: d.suggestedStart, end: d.suggestedEnd };
+    }
+  }
+
+  return d as { start: string; end: string };
+};

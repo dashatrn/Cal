@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { uploadImageForParse, parsePrompt } from "./api";
+import { uploadImageForParse, parsePrompt, BASE_URL } from "./api";
 import type { ParsedFields } from "./api";
 
 type PartialEvent = ParsedFields;
@@ -13,7 +13,7 @@ interface Props {
 export default function NewEventModal({ open, onClose, onSubmit }: Props) {
   const [prompt, setPrompt] = useState("");
   const [fromImage, setFromImage] = useState<PartialEvent | null>(null);
-  const [fromText, setFromText]   = useState<PartialEvent | null>(null);
+  const [fromText, setFromText] = useState<PartialEvent | null>(null);
   const [busy, setBusy] = useState(false);
   const dropRef = useRef<HTMLLabelElement | null>(null);
 
@@ -53,7 +53,7 @@ export default function NewEventModal({ open, onClose, onSubmit }: Props) {
       setFromImage(parsed);
     } catch (e) {
       console.error(e);
-      alert("Could not parse that image.");
+      alert("Could not parse that file.");
     } finally {
       setBusy(false);
     }
@@ -65,18 +65,23 @@ export default function NewEventModal({ open, onClose, onSubmit }: Props) {
     const txt = fromText ?? {};
     return {
       thumb: img.thumb ?? undefined,
+      fileUrl: img.fileUrl ?? undefined,
+      sourceText: img.sourceText ?? undefined,
+
       title: txt.title || img.title,
       start: txt.start || img.start,
-      end:   txt.end   || img.end,
-      repeatDays:       txt.repeatDays       || img.repeatDays,
-      repeatUntil:      txt.repeatUntil      || img.repeatUntil,
+      end: txt.end || img.end,
+      repeatDays: txt.repeatDays || img.repeatDays,
+      repeatUntil: txt.repeatUntil || img.repeatUntil,
       repeatEveryWeeks: txt.repeatEveryWeeks || img.repeatEveryWeeks,
+      description: txt.description || img.description,
+      location: txt.location || img.location,
     };
   }, [fromImage, fromText]);
 
   if (!open) return null;
 
-  const dayNames = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+  const dayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
   const handleClose = () => {
     setPrompt("");
@@ -85,33 +90,69 @@ export default function NewEventModal({ open, onClose, onSubmit }: Props) {
     onClose();
   };
 
+  const fileLink =
+    merged.fileUrl
+      ? (merged.fileUrl.startsWith("http") ? merged.fileUrl : `${BASE_URL}${merged.fileUrl}`)
+      : null;
+
   return (
     <div className="fixed inset-0 z-30 grid place-items-center bg-black/40">
       <div className="w-[680px] max-w-[92vw] bg-white rounded shadow-lg overflow-hidden">
         <div className="px-5 py-4 border-b flex items-center justify-between">
           <h2 className="text-lg font-semibold">New</h2>
-          <button onClick={handleClose} className="text-sm opacity-70 hover:opacity-100">Close</button>
+          <button onClick={handleClose} className="text-sm opacity-70 hover:opacity-100">
+            Close
+          </button>
         </div>
 
         <div className="p-5 grid gap-4">
           {/* Drag & Drop */}
           <label
             ref={dropRef}
-            onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = "copy"; }}
-            onDrop={(e) => { e.preventDefault(); handleFiles(e.dataTransfer.files); }}
+            onDragOver={(e) => {
+              e.preventDefault();
+              e.dataTransfer.dropEffect = "copy";
+            }}
+            onDrop={(e) => {
+              e.preventDefault();
+              handleFiles(e.dataTransfer.files);
+            }}
             className="relative group grid place-items-center rounded border-2 border-dashed border-gray-300 hover:border-gray-400 min-h-[240px] cursor-pointer bg-gray-50"
           >
             <div className="text-center px-6 py-8">
-              <p className="text-sm text-gray-600">Drag & drop a screenshot/email here, or click to choose a file</p>
+              <p className="text-sm text-gray-600">
+                Drag & drop a screenshot/email/PDF here, or click to choose a file
+              </p>
+
               {busy && <p className="text-xs mt-2">Scanning…</p>}
+
+              {/* Image thumbnail if available */}
               {fromImage?.thumb && (
                 <div className="mt-3 flex items-center gap-2 justify-center">
                   <img className="w-12 h-12 object-cover rounded" src={fromImage.thumb} alt="preview" />
                   <span className="text-xs text-gray-500">image attached</span>
                 </div>
               )}
+
+              {/* Otherwise show a generic “file attached” if we have a backend URL */}
+              {!fromImage?.thumb && fromImage?.fileUrl && (
+                <div className="mt-3 text-xs text-gray-500">
+                  file attached{" "}
+                  {fileLink && (
+                    <a className="underline" href={fileLink} target="_blank" rel="noreferrer">
+                      (open)
+                    </a>
+                  )}
+                </div>
+              )}
             </div>
-            <input type="file" accept="image/*" hidden onChange={(e) => handleFiles(e.target.files)} />
+
+            <input
+              type="file"
+              accept="image/*,application/pdf"
+              hidden
+              onChange={(e) => handleFiles(e.target.files)}
+            />
           </label>
 
           {/* Prompt + Live Preview */}
@@ -120,20 +161,30 @@ export default function NewEventModal({ open, onClose, onSubmit }: Props) {
               <span className="text-sm font-medium">Describe it</span>
 
               <div className="relative group">
-                <button type="button" className="text-xs px-2 py-1 rounded border bg-white hover:bg-gray-50">Hover for preview</button>
+                <button type="button" className="text-xs px-2 py-1 rounded border bg-white hover:bg-gray-50">
+                  Hover for preview
+                </button>
                 <div className="absolute right-0 mt-2 w-80 rounded border bg-white shadow-lg p-3 text-sm hidden group-hover:block">
                   <p className="font-semibold mb-1">Preview</p>
-                  {(merged.title || merged.start || merged.end || merged.repeatDays) ? (
+                  {merged.title || merged.start || merged.end || merged.repeatDays ? (
                     <ul className="space-y-1">
-                      <li><span className="text-gray-500">Title:</span> {merged.title ?? "—"}</li>
-                      <li><span className="text-gray-500">Start:</span> {merged.start ?? "—"}</li>
-                      <li><span className="text-gray-500">End:</span> {merged.end ?? "—"}</li>
+                      <li>
+                        <span className="text-gray-500">Title:</span> {merged.title ?? "—"}
+                      </li>
+                      <li>
+                        <span className="text-gray-500">Start:</span> {merged.start ?? "—"}
+                      </li>
+                      <li>
+                        <span className="text-gray-500">End:</span> {merged.end ?? "—"}
+                      </li>
                       <li>
                         <span className="text-gray-500">Repeat:</span>{" "}
-                        {merged.repeatDays?.length ? merged.repeatDays.map(d => dayNames[d]).join(", ") : "—"}
+                        {merged.repeatDays?.length ? merged.repeatDays.map((d) => dayNames[d]).join(", ") : "—"}
                         {merged.repeatUntil ? ` (until ${merged.repeatUntil})` : ""}
                       </li>
-                      <li><span className="text-gray-500">Every N weeks:</span> {merged.repeatEveryWeeks ?? "—"}</li>
+                      <li>
+                        <span className="text-gray-500">Every N weeks:</span> {merged.repeatEveryWeeks ?? "—"}
+                      </li>
                     </ul>
                   ) : (
                     <p className="text-gray-500">Nothing parsed yet.</p>
@@ -154,13 +205,17 @@ export default function NewEventModal({ open, onClose, onSubmit }: Props) {
 `}
               className="w-full border rounded px-3 py-2 resize-y"
             />
-            <p className="text-xs text-gray-500">Text here overrides anything extracted from the image.</p>
+            <p className="text-xs text-gray-500">Text here overrides anything extracted from the file.</p>
           </div>
         </div>
 
         <div className="px-5 py-4 border-t flex justify-end gap-2">
-          <button onClick={handleClose} className="px-3 py-1">Cancel</button>
-          <button onClick={() => onSubmit(merged)} className="px-3 py-1 rounded bg-black text-white">Next</button>
+          <button onClick={handleClose} className="px-3 py-1">
+            Cancel
+          </button>
+          <button onClick={() => onSubmit(merged)} className="px-3 py-1 rounded bg-black text-white">
+            Next
+          </button>
         </div>
       </div>
     </div>
